@@ -1,16 +1,25 @@
 package com.parth.money.moneyserverapp;
 
+import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.Bundle;
+import android.util.Pair;
+import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CompoundButton;
+import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.Switch;
+import android.widget.TableLayout;
+import android.widget.TableRow;
+import android.widget.TextView;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AlertDialog;
@@ -34,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -45,6 +55,7 @@ public class BankActivity extends AppCompatActivity {
     static String yearForQueryMainList = "COMPLETE";
 
     static BigDecimal hdfcAvlBalFLoat = new BigDecimal(0);
+    static BigDecimal hdfcAvlODBalFLoat = new BigDecimal(0);
     static BigDecimal bomAvlBalFloat = new BigDecimal(0);
 
     List<String> months = Arrays.asList(
@@ -62,6 +73,8 @@ public class BankActivity extends AppCompatActivity {
     Switch summarySwitch;
     ListView summaryBankList;
     Button addBankTxnButton;
+    View dialogView;
+    TableLayout tableLayout;
 
 
     @Override
@@ -143,11 +156,20 @@ public class BankActivity extends AppCompatActivity {
         bankAvlBalButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                CountDownLatch latch = new CountDownLatch(3);
+
+                ProgressDialog progressDialog = new ProgressDialog(BankActivity.this);
+                progressDialog.setMessage("Balances are getting fetched ...");
+                progressDialog.setCancelable(false);
+
+                progressDialog.show();
+
                 Call<BigDecimal> hdfcAvlBal = RetrofitUtils.getInstance().getApiService().getAvlBalFrombankAccName("avlBal-HDFC");
                 hdfcAvlBal.enqueue(new Callback<BigDecimal>() {
                     @Override
                     public void onResponse(Call<BigDecimal> call, Response<BigDecimal> response) {
                         hdfcAvlBalFLoat = response.body();
+                        latch.countDown();
                     }
 
                     @Override
@@ -160,6 +182,20 @@ public class BankActivity extends AppCompatActivity {
                     @Override
                     public void onResponse(Call<BigDecimal> call, Response<BigDecimal> response) {
                         bomAvlBalFloat = response.body();
+                        latch.countDown();
+                    }
+
+                    @Override
+                    public void onFailure(Call<BigDecimal> call, Throwable t) {
+
+                    }
+                });
+                Call<BigDecimal> hdfcAvlODBal = RetrofitUtils.getInstance().getApiService().getAvlBalFrombankAccName("avlBal-HDFC-OD");
+                hdfcAvlODBal.enqueue(new Callback<BigDecimal>() {
+                    @Override
+                    public void onResponse(Call<BigDecimal> call, Response<BigDecimal> response) {
+                        hdfcAvlODBalFLoat = response.body();
+                        latch.countDown();
                     }
 
                     @Override
@@ -168,9 +204,23 @@ public class BankActivity extends AppCompatActivity {
                     }
                 });
 
-                String toShowOnDialogAvlBal = "HDFC Bank Salary Account : Rs."+ hdfcAvlBalFLoat.toString() +
-                        "  ~~~~~~~~~~~~ Bank Of Maharashtra OLD : Rs."+ bomAvlBalFloat.toString();
-                showDialogAVLBAL(toShowOnDialogAvlBal);
+                new Thread(() -> {
+                    try{
+                        latch.await();
+                        runOnUiThread(() -> {
+                            if(progressDialog.isShowing()){
+                                progressDialog.dismiss();
+                            }
+                            ArrayList<Pair<String,String>> accBalData = new ArrayList<>();
+                            accBalData.add(new Pair<>("HDFC Bank Salary Account",hdfcAvlBalFLoat.toString()));
+                            accBalData.add(new Pair<>("Overdraft HDFC Bank Salary Account",hdfcAvlODBalFLoat.toString()));
+                            accBalData.add(new Pair<>("Bank Of Maharashtra Old Account",bomAvlBalFloat.toString()));
+                            showDialogAVLBAL(accBalData);
+                        });
+                    }catch (InterruptedException ie){
+                        ie.printStackTrace();
+                    }
+                }).start();
             }
         });
 
@@ -318,10 +368,44 @@ public class BankActivity extends AppCompatActivity {
         alert.show();
     }
 
-    private void showDialogAVLBAL(String dialogData) {
+    private void showDialogAVLBAL(ArrayList<Pair<String,String>> accBalData) {
+        LayoutInflater inflater = LayoutInflater.from(this);
+        dialogView = inflater.inflate(R.layout.accbal_dialogbox, null);
+        tableLayout = dialogView.findViewById(R.id.account_table);
+
+        for(Pair<String,String> accBalItem : accBalData){
+            String accountName = accBalItem.first;
+            String accountBalance = accBalItem.second;
+
+            TableRow tableRow = new TableRow(this);
+
+            // Account Name TextView
+            TextView accountTextView = new TextView(this);
+            accountTextView.setText(accountName);
+            accountTextView.setTextColor(Color.BLACK);
+            accountTextView.setTextSize(16);
+            accountTextView.setPadding(8, 16, 8, 16);
+            accountTextView.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
+
+            // Balance TextView
+            TextView balanceTextView = new TextView(this);
+            balanceTextView.setText("Rs." + accountBalance);
+            balanceTextView.setTextColor(new BigDecimal(accountBalance).compareTo(BigDecimal.ZERO) == 1 ? Color.parseColor("#4CAF50") : Color.parseColor("#F44336"));
+            balanceTextView.setTextSize(16);
+            balanceTextView.setPadding(8, 16, 8, 16);
+            balanceTextView.setGravity(Gravity.END);
+            balanceTextView.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1));
+
+            tableRow.addView(accountTextView);
+            tableRow.addView(balanceTextView);
+
+            tableLayout.addView(tableRow);
+        }
+
         AlertDialog.Builder builder = new AlertDialog.Builder(BankActivity.this);
-        builder.setMessage(dialogData)
+        builder.setTitle("Account Balances")
                 .setCancelable(true)
+                .setView(dialogView)
                 .setPositiveButton("OK", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int id) {
                         dialog.dismiss();

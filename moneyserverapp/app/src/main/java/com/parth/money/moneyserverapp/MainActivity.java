@@ -162,7 +162,7 @@ public class MainActivity extends AppCompatActivity {
 
 
     public void SummaryListPopulator(ListView listView2){
-        Call<List<SummaryModel>> responseFromRetrofit = RetrofitUtils.getInstance().getApiService().getAllDataSummary();
+        Call<List<SummaryModel>> responseFromRetrofit = RetrofitUtils.getInstance().getApiService().getAllDataSummary("true");
 
         responseFromRetrofit.enqueue(new Callback<List<SummaryModel>>() {
             @Override

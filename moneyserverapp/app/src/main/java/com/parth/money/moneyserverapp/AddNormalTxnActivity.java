@@ -22,6 +22,8 @@ import android.widget.Spinner;
 import android.widget.Toast;
 
 import com.parth.money.moneyserverapp.Adapter.CustomAdapterForSummary;
+import com.parth.money.moneyserverapp.Adapter.CustomSpinnerItemAdapter;
+import com.parth.money.moneyserverapp.Model.CustomSpinnerItem;
 import com.parth.money.moneyserverapp.Model.SummaryModel;
 import com.parth.money.moneyserverapp.Model.moneyServerCCResponseEntity;
 import com.parth.money.moneyserverapp.NetworkUtils.RetrofitUtils;
@@ -94,13 +96,24 @@ public class AddNormalTxnActivity extends AppCompatActivity {
 
         //CCNAME
         Spinner CCspinner = findViewById(R.id.CCnameSpinner);
-        List<String> ccNames = Arrays.asList(
-                "AmazonPay ICICI Visa", "HDFC Regalia Gold MasterCard-WORLD",
-                "Standard Chartered Ultimate MasterCard-WORLD", "HSBC PLATINUM Visa",
-                "ONECard METAL Visa", "Swiggy HDFC Visa", "IRCTC SBI Visa", "YesBank Elite+ MasterCard-WORLD", "RBL WorldSafari MasterCard-WORLD", "Marriott Bonvoy HDFC Diner's Club International",
-                "Rupay HDFC"
-        );
-        ArrayAdapter<String> ccNamesAdapter = new ArrayAdapter<>(this, R.layout.my_spinner, ccNames);
+        List<CustomSpinnerItem> spinnerItems = new ArrayList<>();
+        spinnerItems.add(new CustomSpinnerItem("AmazonPay ICICI Visa", true));
+        spinnerItems.add(new CustomSpinnerItem("HDFC Regalia Gold MasterCard-WORLD", true));
+        spinnerItems.add(new CustomSpinnerItem("Standard Chartered Ultimate MasterCard-WORLD", true));
+        spinnerItems.add(new CustomSpinnerItem("HSBC PLATINUM Visa", true));
+        spinnerItems.add(new CustomSpinnerItem("ONECard METAL Visa", true));
+        spinnerItems.add(new CustomSpinnerItem("Swiggy HDFC Visa", true));
+        spinnerItems.add(new CustomSpinnerItem("IRCTC SBI Visa", true));
+        spinnerItems.add(new CustomSpinnerItem("YesBank Reserv MasterCard-WORLD", true));
+        spinnerItems.add(new CustomSpinnerItem("RBL WorldSafari MasterCard-WORLD", true));
+        spinnerItems.add(new CustomSpinnerItem("MakeMyTrip ICICI MasterCard-WORLD & Rupay", true));
+        spinnerItems.add(new CustomSpinnerItem("Marriott Bonvoy HDFC Diner's Club International", true));
+        spinnerItems.add(new CustomSpinnerItem("Rupay HDFC", true));
+        spinnerItems.add(new CustomSpinnerItem("YesBank Elite+ MasterCard-WORLD", false));
+        spinnerItems.add(new CustomSpinnerItem("AmazonPayLater OLD-CLOSED", false));
+        spinnerItems.add(new CustomSpinnerItem("FlipkartPayLater OLD-CLOSED", false));
+
+        CustomSpinnerItemAdapter ccNamesAdapter = new CustomSpinnerItemAdapter(this, android.R.layout.simple_spinner_item, spinnerItems);
         CCspinner.setAdapter(ccNamesAdapter);
         CCspinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override

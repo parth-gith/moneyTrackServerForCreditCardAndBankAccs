@@ -8,6 +8,7 @@ import com.parth.money.moneyServer.Repository.CreditCardTxnDetailsMainRepository
 import com.parth.money.moneyServer.Repository.MoneyServerPropertiesDataRepository;
 import com.parth.money.moneyServer.Utils.CCEmiUtility;
 import com.parth.money.moneyServer.Utils.SummaryUtility;
+import com.parth.money.moneyServer.Utils.SummaryUtilityMultiThreaded;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +39,9 @@ public class CreditCardTxndetailsMainController {
 
     @Autowired
     SummaryUtility summaryUtility;
+
+    @Autowired
+    SummaryUtilityMultiThreaded summaryUtilityMultiThreaded;
 
     @Autowired
     EntityManager entityManager;
@@ -72,14 +76,35 @@ public class CreditCardTxndetailsMainController {
     }
 
     @GetMapping("/txn/Summary")
-    public SummaryModel getSummaryByMonthAndYear(@RequestParam(value="month",required=false,defaultValue="X")String month, @RequestParam(value="year",required=false,defaultValue="X")String year){
-        SummaryModel summaryModel = summaryUtility.getSummaryFromTxns(month,year);
+    public SummaryModel getSummaryByMonthAndYear(@RequestParam(value="month",required=false,defaultValue="X")String month,
+                                                 @RequestParam(value="year",required=false,defaultValue="X")String year,
+                                                 @RequestParam(value="multithreaded",required=false,defaultValue="true") String multithreaded){
+        SummaryModel summaryModel;
+        if(multithreaded.equals("true")){
+            summaryModel = summaryUtilityMultiThreaded.getSummaryFromTxns(month,year);
+        }else if(multithreaded.equals("false")){
+            summaryModel = summaryUtility.getSummaryFromTxns(month,year);
+        }else{
+            return new SummaryModel();
+        }
         return summaryModel;
     }
 
     @GetMapping("/txn/Summary/allTxns")
-    public List<SummaryModel> getSummaryAlltxns(){
-        return summaryUtility.getSummarylist();
+    public List<SummaryModel> getSummaryAlltxns(@RequestParam(value="multithreaded",required=false,defaultValue="true") String multithreaded){
+        List<SummaryModel> returnData;
+        try{
+            if(multithreaded.equals("true")){
+                returnData = summaryUtilityMultiThreaded.getSummarylist();
+            }else if(multithreaded.equals("false")){
+                returnData = summaryUtility.getSummarylist();
+            }else{
+                return new ArrayList<>();
+            }
+            return returnData;
+        }catch(Exception e){
+            return new ArrayList<>();
+        }
     }
 
 
@@ -121,7 +146,7 @@ public class CreditCardTxndetailsMainController {
         if(entity.getTxnCCused().startsWith("IRCTC")){
             typeOfCard = "IRCTCSBI";
         }
-        if(entity.getTxnCCused().startsWith("YesBank")){
+        if(entity.getTxnCCused().startsWith("YesBank Elite+")){
             typeOfCard = "YESELITEPLUS";
         }
         if(entity.getTxnCCused().startsWith("RBL")){
@@ -132,6 +157,12 @@ public class CreditCardTxndetailsMainController {
         }
         if(entity.getTxnCCused().startsWith("Rupay")){
             typeOfCard = "RUPAYHDFC";
+        }
+        if(entity.getTxnCCused().startsWith("YesBank Reserv")){
+            typeOfCard = "YESRESERV";
+        }
+        if(entity.getTxnCCused().startsWith("MakeMyTrip")){
+            typeOfCard = "MMTICICI";
         }
         String currDBlastusedYear = moneyServerPropertiesDataRepository.findById(typeOfCard+"lastUsedyear").getValue();
         String currDBlastusedMonth = moneyServerPropertiesDataRepository.findById(typeOfCard+"lastUsedmonth").getValue();
@@ -213,7 +244,7 @@ public class CreditCardTxndetailsMainController {
         if(entity.getTxnCCused().startsWith("IRCTC")){
             typeOfCard = "IRCTCSBI";
         }
-        if(entity.getTxnCCused().startsWith("YesBank")){
+        if(entity.getTxnCCused().startsWith("YesBank Elite+")){
             typeOfCard = "YESELITEPLUS";
         }
         if(entity.getTxnCCused().startsWith("RBL")){
@@ -224,6 +255,12 @@ public class CreditCardTxndetailsMainController {
         }
         if(entity.getTxnCCused().startsWith("Rupay")){
             typeOfCard = "RUPAYHDFC";
+        }
+        if(entity.getTxnCCused().startsWith("YesBank Reserv")){
+            typeOfCard = "YESRESERV";
+        }
+        if(entity.getTxnCCused().startsWith("MakeMyTrip")){
+            typeOfCard = "MMTICICI";
         }
         String currDBlastusedYear = moneyServerPropertiesDataRepository.findById(typeOfCard+"lastUsedyear").getValue();
         String currDBlastusedMonth = moneyServerPropertiesDataRepository.findById(typeOfCard+"lastUsedmonth").getValue();
@@ -311,7 +348,7 @@ public class CreditCardTxndetailsMainController {
         if(responseFromID.getTxnCCused().startsWith("IRCTC")){
             typeOfCard = "IRCTCSBI";
         }
-        if(responseFromID.getTxnCCused().startsWith("YesBank")){
+        if(responseFromID.getTxnCCused().startsWith("YesBank Elite+")){
             typeOfCard = "YESELITEPLUS";
         }
         if(responseFromID.getTxnCCused().startsWith("RBL")){
@@ -322,6 +359,12 @@ public class CreditCardTxndetailsMainController {
         }
         if(responseFromID.getTxnCCused().startsWith("Rupay")){
             typeOfCard = "RUPAYHDFC";
+        }
+        if(responseFromID.getTxnCCused().startsWith("YesBank Reserv")){
+            typeOfCard = "YESRESERV";
+        }
+        if(responseFromID.getTxnCCused().startsWith("MakeMyTrip")){
+            typeOfCard = "MMTICICI";
         }
         String currDBlastusedYear = moneyServerPropertiesDataRepository.findById(typeOfCard+"lastUsedyear").getValue();
         String currDBlastusedMonth = moneyServerPropertiesDataRepository.findById(typeOfCard+"lastUsedmonth").getValue();
@@ -363,7 +406,7 @@ public class CreditCardTxndetailsMainController {
         if(responseFromID.getTxnCCused().startsWith("IRCTC")){
             typeOfCard = "IRCTCSBI";
         }
-        if(responseFromID.getTxnCCused().startsWith("YesBank")){
+        if(responseFromID.getTxnCCused().startsWith("YesBank Elite+")){
             typeOfCard = "YESELITEPLUS";
         }
         if(responseFromID.getTxnCCused().startsWith("RBL")){
@@ -374,6 +417,12 @@ public class CreditCardTxndetailsMainController {
         }
         if(responseFromID.getTxnCCused().startsWith("Rupay")){
             typeOfCard = "RUPAYHDFC";
+        }
+        if(responseFromID.getTxnCCused().startsWith("YesBank Reserv")){
+            typeOfCard = "YESRESERV";
+        }
+        if(responseFromID.getTxnCCused().startsWith("MakeMyTrip")){
+            typeOfCard = "MMTICICI";
         }
         String currDBlastusedYear = moneyServerPropertiesDataRepository.findById(typeOfCard+"lastUsedyear").getValue();
         String currDBlastusedMonth = moneyServerPropertiesDataRepository.findById(typeOfCard+"lastUsedmonth").getValue();

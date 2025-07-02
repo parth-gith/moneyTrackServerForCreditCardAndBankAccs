@@ -29,6 +29,7 @@ public class CustomAdapterForBank extends ArrayAdapter<bankResponseEntity> {
         TextView t2;
         TextView t3;
         TextView t4;
+        TextView t5;
     }
 
     public CustomAdapterForBank(ArrayList<bankResponseEntity> data, Context context) {
@@ -58,6 +59,7 @@ public class CustomAdapterForBank extends ArrayAdapter<bankResponseEntity> {
             viewHolder.t2 = (TextView) convertView.findViewById(R.id.BanktextView2);
             viewHolder.t3 = (TextView) convertView.findViewById(R.id.BanktextView3);
             viewHolder.t4 = (TextView) convertView.findViewById(R.id.BanktextView4);
+            viewHolder.t5 = (TextView) convertView.findViewById(R.id.BanktextView5);
 
             result = convertView;
 
@@ -71,16 +73,24 @@ public class CustomAdapterForBank extends ArrayAdapter<bankResponseEntity> {
         String DataBankAccused = bankResponseEntityobj.getBankAccName();
         String DataTxnDetails = bankResponseEntityobj.getBanktxnDetails();
         BigDecimal DataTxnAmt = bankResponseEntityobj.getBanktxnAmount();
+        BigDecimal DataTxnODAmt = bankResponseEntityobj.getBankODtxnAmount();
 
         viewHolder.t1.setText(DataMonthandyear);
         viewHolder.t2.setText(DataBankAccused);
         viewHolder.t3.setText(DataTxnDetails);
-        viewHolder.t4.setText(DataTxnAmt.toString());
+        viewHolder.t4.setText("Savings   :  "+DataTxnAmt.toString());
+        viewHolder.t5.setText("OverDraft :  "+DataTxnODAmt.toString());
 
         if(DataTxnAmt.signum()==-1){
             viewHolder.t4.setTextColor(Color.parseColor("#FF0000"));
         }else{
             viewHolder.t4.setTextColor(Color.parseColor("#36802d"));
+        }
+
+        if(DataTxnODAmt.signum()==-1){
+            viewHolder.t5.setTextColor(Color.parseColor("#FF0000"));
+        }else{
+            viewHolder.t5.setTextColor(Color.parseColor("#36802d"));
         }
 
         return convertView;

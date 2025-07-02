@@ -11,6 +11,7 @@ public class bankResponseEntity {
     private String bankAccName;
     private String banktxnDetails;
     private BigDecimal banktxnAmount;
+    private BigDecimal bankODtxnAmount;
     private BigDecimal bankTxnSeqNumOrder;
 
 
@@ -76,5 +77,13 @@ public class bankResponseEntity {
 
     public void setBanktxnBillingDate(String banktxnBillingDate) {
         this.banktxnBillingDate = banktxnBillingDate;
+    }
+
+    public BigDecimal getBankODtxnAmount() {
+        return bankODtxnAmount;
+    }
+
+    public void setBankODtxnAmount(BigDecimal bankODtxnAmount) {
+        this.bankODtxnAmount = bankODtxnAmount;
     }
 }

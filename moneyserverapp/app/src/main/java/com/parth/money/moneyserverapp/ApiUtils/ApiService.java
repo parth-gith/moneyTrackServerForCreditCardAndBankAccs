@@ -27,7 +27,7 @@ public interface ApiService {
     Call<List<moneyServerCCResponseEntity>> getDataFromMonthAndYear(@Query("month") String month,@Query("year") String year);
 
     @GET("moneyServer/CreditCardTxnDetails/txn/Summary/allTxns")
-    Call<List<SummaryModel>> getAllDataSummary();
+    Call<List<SummaryModel>> getAllDataSummary(@Query("multithreaded") String multithreaded);
 
     @GET("moneyServer/CreditCardTxnDetails/txn/Toptxns/allTxns")
     Call<List<moneyServerCCTopTxnResponseEntity>> getAllTopTxnData();

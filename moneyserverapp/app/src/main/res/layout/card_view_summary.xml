@@ -87,6 +87,18 @@
             android:textStyle="bold"/>
 
         <TextView
+            android:id="@+id/SummaryTextView16"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textStyle="bold"/>
+
+        <TextView
+            android:id="@+id/SummaryTextView17"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textStyle="bold"/>
+
+        <TextView
             android:id="@+id/SummaryTextView5"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

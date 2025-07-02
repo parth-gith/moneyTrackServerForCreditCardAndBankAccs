@@ -39,8 +39,13 @@ public class BankTxnDetailsMain implements Serializable {
     @Column(name="bank_txn_amount")
     private BigDecimal banktxnAmount;
 
+    @Column(name="bank_od_txn_amount")
+    private BigDecimal bankODtxnAmount;
+
     @Column(name="bank_txn_seq_number_order")
     private BigDecimal bankTxnSeqNumOrder;
+
+    //TODO : add total txn value
 
     public String getBanktxnId() {
         return banktxnId;
@@ -110,6 +115,14 @@ public class BankTxnDetailsMain implements Serializable {
         return Integer.parseInt(banktxnBillingYear);
     }
 
+    public BigDecimal getBankODtxnAmount() {
+        return bankODtxnAmount;
+    }
+
+    public void setBankODtxnAmount(BigDecimal bankODtxnAmount) {
+        this.bankODtxnAmount = bankODtxnAmount;
+    }
+
     public int getBankTxnBillingMonthINTEGER(){
         List<String> months = Arrays.asList(
                 "January", "February", "March", "April",
@@ -123,4 +136,18 @@ public class BankTxnDetailsMain implements Serializable {
         return Integer.parseInt(banktxnBillingDate.trim());
     }
 
+    @Override
+    public String toString() {
+        return "BankTxnDetailsMain{" +
+                "banktxnId='" + banktxnId + '\'' +
+                ", banktxnBillingMonth='" + banktxnBillingMonth + '\'' +
+                ", banktxnBillingYear='" + banktxnBillingYear + '\'' +
+                ", banktxnBillingDate='" + banktxnBillingDate + '\'' +
+                ", bankAccName='" + bankAccName + '\'' +
+                ", banktxnDetails='" + banktxnDetails + '\'' +
+                ", banktxnAmount=" + banktxnAmount +
+                ", bankODtxnAmount=" + bankODtxnAmount +
+                ", bankTxnSeqNumOrder=" + bankTxnSeqNumOrder +
+                '}';
+    }
 }

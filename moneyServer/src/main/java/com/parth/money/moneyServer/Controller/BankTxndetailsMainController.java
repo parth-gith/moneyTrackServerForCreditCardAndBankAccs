@@ -109,13 +109,7 @@ public class BankTxndetailsMainController {
             query.setParameter("id","banklastUsedyear");
             query.executeUpdate();
         }
-        BankTxnDetailsMain returnEntity =  bankTxnDetailsMainRepository.save(entity);
-        CreditCardTopTxnDetailsMain topTxnEntity = new CreditCardTopTxnDetailsMain();
-        topTxnEntity.setTxnId(returnEntity.getBanktxnId());
-        topTxnEntity.setTxnDetails(returnEntity.getBanktxnDetails());
-        topTxnEntity.setTxnAmount(returnEntity.getBanktxnAmount().negate());
-        topTxnEntity.setCcorbank("B");
-        creditCardTopTxnDetailsMainRepository.save(topTxnEntity);
+        BankTxnDetailsMain returnEntity = null;
 
         String bankAccName = "avlBal-HDFC";
         if(entity.getBankAccName().startsWith("HDFC Bank")){
@@ -125,16 +119,273 @@ public class BankTxndetailsMainController {
             bankAccName = "avlBal-BOM";
         }
         String avlBaltemp = moneyServerPropertiesDataRepository.findById(bankAccName).getValue();
-        BigDecimal floatAvlBaltemp = new BigDecimal(avlBaltemp);
+        BigDecimal floatAvlBal = new BigDecimal(avlBaltemp);
         BigDecimal txnAmtcurrent = entity.getBanktxnAmount();
         if(txnAmtcurrent.signum()==-1){
-            floatAvlBaltemp = floatAvlBaltemp.add(txnAmtcurrent);
-        }else{
-            floatAvlBaltemp = floatAvlBaltemp.add(txnAmtcurrent);
+            // expense
+            BigDecimal floatAvlBalAfterCal = floatAvlBal.add(txnAmtcurrent);
+            if(bankAccName.equals("avlBal-HDFC")){
+                if(floatAvlBalAfterCal.compareTo(BigDecimal.ZERO) == -1 && floatAvlBal.compareTo(BigDecimal.ZERO) == 1){
+                    // new acc bal going -ve & existing acc bal is +ve  so, OD will be trigerred
+                    // extra -ve bal will be added as OD bal & update acc bal as 0
+//                    System.out.println("// new acc bal going -ve & existing acc bal is +ve  so, OD will be trigerred\n" +
+//                            "                    // extra -ve bal will be added as OD bal & update acc bal as 0");
+                    String avlODBaltemp = moneyServerPropertiesDataRepository.findById(bankAccName+"-OD").getValue();
+                    BigDecimal floatAvlODBal = new BigDecimal(avlODBaltemp);
+                    floatAvlODBal = floatAvlODBal.add(floatAvlBalAfterCal);
+
+                    BigDecimal totalTxnAmt = entity.getBanktxnAmount();
+                    BigDecimal txnMainPart = floatAvlBal.negate();
+                    BigDecimal txnODPart = floatAvlBalAfterCal;
+
+                    entity.setBanktxnAmount(txnMainPart);
+                    entity.setBankODtxnAmount(txnODPart);
+                    returnEntity =  bankTxnDetailsMainRepository.save(entity);
+                    System.out.println("entity to save is : "+entity.toString());
+
+                    CreditCardTopTxnDetailsMain topTxnEntity = new CreditCardTopTxnDetailsMain();
+                    topTxnEntity.setTxnId(returnEntity.getBanktxnId());
+                    topTxnEntity.setTxnDetails(returnEntity.getBanktxnDetails());
+                    topTxnEntity.setTxnAmount(totalTxnAmt.negate());
+                    topTxnEntity.setCcorbank("B");
+                    creditCardTopTxnDetailsMainRepository.save(topTxnEntity);
+
+                    System.out.println("floatAvlBal is "+floatAvlBal+" and floatAvlODBal is "+floatAvlODBal);
+                    Query queryAvlBalupdate = entityManager.createNamedQuery("MoneyServerPropertiesData.updateAvlBalBybankAccName");
+                    queryAvlBalupdate.setParameter("id",bankAccName+"-OD");
+                    queryAvlBalupdate.setParameter("newData",floatAvlODBal.toString());
+                    queryAvlBalupdate.executeUpdate();
+
+                    floatAvlBal = BigDecimal.ZERO;
+                    queryAvlBalupdate.setParameter("id",bankAccName);
+                    queryAvlBalupdate.setParameter("newData",floatAvlBal.toString());
+                    queryAvlBalupdate.executeUpdate();
+
+                }else if(floatAvlBalAfterCal.compareTo(BigDecimal.ZERO) == -1 && floatAvlBal.compareTo(BigDecimal.ZERO) == 0){
+                    // new acc bal going -ve & existing acc bal is 0  so, OD will be trigerred
+                    // txn amount bal will be added as OD bal & acc bal should be already 0
+//                    System.out.println("// new acc bal going -ve & existing acc bal is 0  so, OD will be trigerred\n" +
+//                            "                    // txn amount bal will be added as OD bal & acc bal should be already 0");
+                    String avlODBaltemp = moneyServerPropertiesDataRepository.findById(bankAccName+"-OD").getValue();
+                    BigDecimal floatAvlODBal = new BigDecimal(avlODBaltemp);
+                    floatAvlODBal = floatAvlODBal.add(txnAmtcurrent);
+
+                    BigDecimal totalTxnAmt = entity.getBanktxnAmount();
+                    BigDecimal txnMainPart = BigDecimal.ZERO;
+                    BigDecimal txnODPart = txnAmtcurrent;
+
+                    entity.setBanktxnAmount(txnMainPart);
+                    entity.setBankODtxnAmount(txnODPart);
+                    returnEntity =  bankTxnDetailsMainRepository.save(entity);
+                    System.out.println("entity to save is : "+entity.toString());
+
+                    CreditCardTopTxnDetailsMain topTxnEntity = new CreditCardTopTxnDetailsMain();
+                    topTxnEntity.setTxnId(returnEntity.getBanktxnId());
+                    topTxnEntity.setTxnDetails(returnEntity.getBanktxnDetails());
+                    topTxnEntity.setTxnAmount(totalTxnAmt.negate());
+                    topTxnEntity.setCcorbank("B");
+                    creditCardTopTxnDetailsMainRepository.save(topTxnEntity);
+
+                    System.out.println("floatAvlBal is "+floatAvlBal+" and floatAvlODBal is "+floatAvlODBal);
+                    Query queryAvlBalupdate = entityManager.createNamedQuery("MoneyServerPropertiesData.updateAvlBalBybankAccName");
+                    queryAvlBalupdate.setParameter("id",bankAccName+"-OD");
+                    queryAvlBalupdate.setParameter("newData",floatAvlODBal.toString());
+                    queryAvlBalupdate.executeUpdate();
+
+                }else if(floatAvlBalAfterCal.compareTo(BigDecimal.ZERO) >= 0){
+                    // normal case - new acc bal +ve and NO OD
+//                    System.out.println("// normal case - new acc bal +ve and NO OD");
+                    BigDecimal totalTxnAmt = entity.getBanktxnAmount();
+                    BigDecimal txnODPart = BigDecimal.ZERO;
+
+                    entity.setBanktxnAmount(totalTxnAmt);
+                    entity.setBankODtxnAmount(txnODPart);
+                    returnEntity =  bankTxnDetailsMainRepository.save(entity);
+                    System.out.println("entity to save is : "+entity.toString());
+
+                    CreditCardTopTxnDetailsMain topTxnEntity = new CreditCardTopTxnDetailsMain();
+                    topTxnEntity.setTxnId(returnEntity.getBanktxnId());
+                    topTxnEntity.setTxnDetails(returnEntity.getBanktxnDetails());
+                    topTxnEntity.setTxnAmount(totalTxnAmt.negate());
+                    topTxnEntity.setCcorbank("B");
+                    creditCardTopTxnDetailsMainRepository.save(topTxnEntity);
+
+                    System.out.println("floatAvlBal is "+floatAvlBal);
+                    Query queryAvlBalupdate = entityManager.createNamedQuery("MoneyServerPropertiesData.updateAvlBalBybankAccName");
+                    floatAvlBal = floatAvlBalAfterCal;
+                    queryAvlBalupdate.setParameter("id",bankAccName);
+                    queryAvlBalupdate.setParameter("newData",floatAvlBal.toString());
+                    queryAvlBalupdate.executeUpdate();
+                }
+            }else if(bankAccName.equals("avlBal-BOM")){
+                BigDecimal totalTxnAmt = entity.getBanktxnAmount();
+                BigDecimal txnODPart = BigDecimal.ZERO;
+
+                entity.setBanktxnAmount(totalTxnAmt);
+                entity.setBankODtxnAmount(txnODPart);
+                returnEntity =  bankTxnDetailsMainRepository.save(entity);
+                System.out.println("entity to save is : "+entity.toString());
+
+                CreditCardTopTxnDetailsMain topTxnEntity = new CreditCardTopTxnDetailsMain();
+                topTxnEntity.setTxnId(returnEntity.getBanktxnId());
+                topTxnEntity.setTxnDetails(returnEntity.getBanktxnDetails());
+                topTxnEntity.setTxnAmount(totalTxnAmt.negate());
+                topTxnEntity.setCcorbank("B");
+                creditCardTopTxnDetailsMainRepository.save(topTxnEntity);
+
+                System.out.println("floatAvlBal is "+floatAvlBal);
+                Query queryAvlBalupdate = entityManager.createNamedQuery("MoneyServerPropertiesData.updateAvlBalBybankAccName");
+                floatAvlBal = floatAvlBalAfterCal;
+                queryAvlBalupdate.setParameter("id",bankAccName);
+                queryAvlBalupdate.setParameter("newData",floatAvlBal.toString());
+                queryAvlBalupdate.executeUpdate();
+            }
+        }else if(txnAmtcurrent.signum()==1){
+            // income txn
+            if(bankAccName.equals("avlBal-HDFC")){
+                String avlODBaltemp = moneyServerPropertiesDataRepository.findById(bankAccName+"-OD").getValue();
+                BigDecimal floatAvlODBal = new BigDecimal(avlODBaltemp);
+                if(floatAvlODBal.compareTo(BigDecimal.ZERO) == -1){
+                    // incoming txn amt is used for clearing OD
+//                    System.out.println("// incoming txn amt is used for clearing OD");
+                    BigDecimal floatTxnAmtAfterODSwap = floatAvlODBal.add(txnAmtcurrent);
+                    if(floatTxnAmtAfterODSwap.compareTo(BigDecimal.ZERO) == 0){
+                        // txn amt fully used in OD swap, outstanding amt due in OD is now 0
+                        System.out.println("// txn amt fully used in OD swap, outstanding amt due in OD is now 0");
+                        floatAvlODBal = BigDecimal.ZERO;
+                        BigDecimal totalTxnAmt = txnAmtcurrent;
+                        BigDecimal txnMainPart = BigDecimal.ZERO;
+                        BigDecimal txnODPart = txnAmtcurrent;
+
+                        entity.setBanktxnAmount(txnMainPart);
+                        entity.setBankODtxnAmount(txnODPart);
+                        returnEntity =  bankTxnDetailsMainRepository.save(entity);
+                        System.out.println("entity to save is : "+entity.toString());
+
+                        CreditCardTopTxnDetailsMain topTxnEntity = new CreditCardTopTxnDetailsMain();
+                        topTxnEntity.setTxnId(returnEntity.getBanktxnId());
+                        topTxnEntity.setTxnDetails(returnEntity.getBanktxnDetails());
+                        topTxnEntity.setTxnAmount(totalTxnAmt.negate());
+                        topTxnEntity.setCcorbank("B");
+                        creditCardTopTxnDetailsMainRepository.save(topTxnEntity);
+
+                        System.out.println("floatAvlBal is "+floatAvlBal+" and floatAvlODBal is "+floatAvlODBal);
+                        Query queryAvlBalupdate = entityManager.createNamedQuery("MoneyServerPropertiesData.updateAvlBalBybankAccName");
+                        queryAvlBalupdate.setParameter("id",bankAccName+"-OD");
+                        queryAvlBalupdate.setParameter("newData",floatAvlODBal.toString());
+                        queryAvlBalupdate.executeUpdate();
+
+                    }else if(floatTxnAmtAfterODSwap.compareTo(BigDecimal.ZERO) == 1){
+                        // txn amt partially used in OD swap making it 0 , remaining amt added to acc bal
+//                        System.out.println("// txn amt partially used in OD swap making it 0 , remaining amt added to acc bal");
+                        BigDecimal totalTxnAmt = txnAmtcurrent;
+                        BigDecimal txnMainPart = floatTxnAmtAfterODSwap;
+                        BigDecimal txnODPart = floatAvlODBal;
+                        floatAvlODBal = BigDecimal.ZERO;
+                        floatAvlBal = floatAvlBal.add(txnMainPart);
+
+                        entity.setBanktxnAmount(txnMainPart);
+                        entity.setBankODtxnAmount(txnODPart.multiply(new BigDecimal(-1)));
+                        returnEntity =  bankTxnDetailsMainRepository.save(entity);
+                        System.out.println("entity to save is : "+entity.toString());
+
+                        CreditCardTopTxnDetailsMain topTxnEntity = new CreditCardTopTxnDetailsMain();
+                        topTxnEntity.setTxnId(returnEntity.getBanktxnId());
+                        topTxnEntity.setTxnDetails(returnEntity.getBanktxnDetails());
+                        topTxnEntity.setTxnAmount(totalTxnAmt.negate());
+                        topTxnEntity.setCcorbank("B");
+                        creditCardTopTxnDetailsMainRepository.save(topTxnEntity);
+
+                        System.out.println("floatAvlBal is "+floatAvlBal+" and floatAvlODBal is "+floatAvlODBal);
+                        Query queryAvlBalupdate = entityManager.createNamedQuery("MoneyServerPropertiesData.updateAvlBalBybankAccName");
+                        queryAvlBalupdate.setParameter("id",bankAccName+"-OD");
+                        queryAvlBalupdate.setParameter("newData",floatAvlODBal.toString());
+                        queryAvlBalupdate.executeUpdate();
+
+                        queryAvlBalupdate.setParameter("id",bankAccName);
+                        queryAvlBalupdate.setParameter("newData",floatAvlBal.toString());
+                        queryAvlBalupdate.executeUpdate();
+
+                    }else if(floatTxnAmtAfterODSwap.compareTo(BigDecimal.ZERO) == -1){
+                        // txn amt fully used in OD swap, still some outstanding amt due in OD (-ve bal)
+//                        System.out.println("// txn amt fully used in OD swap, still some outstanding amt due in OD (-ve bal)");
+                        BigDecimal totalTxnAmt = txnAmtcurrent;
+                        BigDecimal txnMainPart = BigDecimal.ZERO;
+                        BigDecimal txnODPart = txnAmtcurrent;
+                        floatAvlODBal = floatTxnAmtAfterODSwap;
+
+                        entity.setBanktxnAmount(txnMainPart);
+                        entity.setBankODtxnAmount(txnODPart);
+                        returnEntity =  bankTxnDetailsMainRepository.save(entity);
+                        System.out.println("entity to save is : "+entity.toString());
+
+                        CreditCardTopTxnDetailsMain topTxnEntity = new CreditCardTopTxnDetailsMain();
+                        topTxnEntity.setTxnId(returnEntity.getBanktxnId());
+                        topTxnEntity.setTxnDetails(returnEntity.getBanktxnDetails());
+                        topTxnEntity.setTxnAmount(totalTxnAmt.negate());
+                        topTxnEntity.setCcorbank("B");
+                        creditCardTopTxnDetailsMainRepository.save(topTxnEntity);
+
+                        System.out.println("floatAvlBal is "+floatAvlBal+" and floatAvlODBal is "+floatAvlODBal);
+                        Query queryAvlBalupdate = entityManager.createNamedQuery("MoneyServerPropertiesData.updateAvlBalBybankAccName");
+                        queryAvlBalupdate.setParameter("id",bankAccName+"-OD");
+                        queryAvlBalupdate.setParameter("newData",floatAvlODBal.toString());
+                        queryAvlBalupdate.executeUpdate();
+
+                    }
+                }else{
+                    // normal case - OD dues 0 , txn amt added to acc bal
+//                    System.out.println("// normal case - OD dues 0 , txn amt added to acc bal");
+                    BigDecimal totalTxnAmt = txnAmtcurrent;
+                    BigDecimal txnODPart = BigDecimal.ZERO;
+
+                    entity.setBanktxnAmount(totalTxnAmt);
+                    entity.setBankODtxnAmount(txnODPart);
+                    returnEntity =  bankTxnDetailsMainRepository.save(entity);
+                    System.out.println("entity to save is : "+entity.toString());
+
+                    CreditCardTopTxnDetailsMain topTxnEntity = new CreditCardTopTxnDetailsMain();
+                    topTxnEntity.setTxnId(returnEntity.getBanktxnId());
+                    topTxnEntity.setTxnDetails(returnEntity.getBanktxnDetails());
+                    topTxnEntity.setTxnAmount(totalTxnAmt.negate());
+                    topTxnEntity.setCcorbank("B");
+                    creditCardTopTxnDetailsMainRepository.save(topTxnEntity);
+
+                    System.out.println("floatAvlBal is "+floatAvlBal);
+                    Query queryAvlBalupdate = entityManager.createNamedQuery("MoneyServerPropertiesData.updateAvlBalBybankAccName");
+                    floatAvlBal = floatAvlBal.add(totalTxnAmt);
+                    queryAvlBalupdate.setParameter("id",bankAccName);
+                    queryAvlBalupdate.setParameter("newData",floatAvlBal.toString());
+                    queryAvlBalupdate.executeUpdate();
+
+                }
+            }else if(bankAccName.equals("avlBal-BOM")){
+                BigDecimal totalTxnAmt = txnAmtcurrent;
+                BigDecimal txnODPart = BigDecimal.ZERO;
+
+                entity.setBanktxnAmount(totalTxnAmt);
+                entity.setBankODtxnAmount(txnODPart);
+                returnEntity =  bankTxnDetailsMainRepository.save(entity);
+                System.out.println("entity to save is : "+entity.toString());
+
+                CreditCardTopTxnDetailsMain topTxnEntity = new CreditCardTopTxnDetailsMain();
+                topTxnEntity.setTxnId(returnEntity.getBanktxnId());
+                topTxnEntity.setTxnDetails(returnEntity.getBanktxnDetails());
+                topTxnEntity.setTxnAmount(totalTxnAmt.negate());
+                topTxnEntity.setCcorbank("B");
+                creditCardTopTxnDetailsMainRepository.save(topTxnEntity);
+
+                System.out.println("floatAvlBal is "+floatAvlBal);
+                Query queryAvlBalupdate = entityManager.createNamedQuery("MoneyServerPropertiesData.updateAvlBalBybankAccName");
+                floatAvlBal = floatAvlBal.add(totalTxnAmt);
+                queryAvlBalupdate.setParameter("id",bankAccName);
+                queryAvlBalupdate.setParameter("newData",floatAvlBal.toString());
+                queryAvlBalupdate.executeUpdate();
+            }
         }
         Query queryAvlBalupdate = entityManager.createNamedQuery("MoneyServerPropertiesData.updateAvlBalBybankAccName");
         queryAvlBalupdate.setParameter("id",bankAccName);
-        queryAvlBalupdate.setParameter("newData",floatAvlBaltemp.toString());
+        queryAvlBalupdate.setParameter("newData",floatAvlBal.toString());
         queryAvlBalupdate.executeUpdate();
 
         return returnEntity;
@@ -166,16 +417,22 @@ public class BankTxndetailsMainController {
             bankAccName = "avlBal-BOM";
         }
         String avlBaltemp = moneyServerPropertiesDataRepository.findById(bankAccName).getValue();
+        String avlODBaltemp = moneyServerPropertiesDataRepository.findById(bankAccName+"-OD").getValue();
         BigDecimal floatAvlBaltemp = new BigDecimal(avlBaltemp);
+        BigDecimal floatODAvlBaltemp = new BigDecimal(avlODBaltemp);
         BigDecimal txnAmtcurrent = responseFromID.getBanktxnAmount();
-        if(txnAmtcurrent.signum()==-1){
-            floatAvlBaltemp = floatAvlBaltemp.subtract(txnAmtcurrent);
-        }else{
-            floatAvlBaltemp = floatAvlBaltemp.subtract(txnAmtcurrent);
-        }
+        BigDecimal txnODAmtcurrent = responseFromID.getBankODtxnAmount();
+
+        floatAvlBaltemp = floatAvlBaltemp.subtract(txnAmtcurrent);
+        floatODAvlBaltemp = floatODAvlBaltemp.subtract(txnODAmtcurrent);
+
         Query queryAvlBalupdate = entityManager.createNamedQuery("MoneyServerPropertiesData.updateAvlBalBybankAccName");
         queryAvlBalupdate.setParameter("id",bankAccName);
         queryAvlBalupdate.setParameter("newData",floatAvlBaltemp.toString());
+        queryAvlBalupdate.executeUpdate();
+
+        queryAvlBalupdate.setParameter("id",bankAccName+"-OD");
+        queryAvlBalupdate.setParameter("newData",floatODAvlBaltemp.toString());
         queryAvlBalupdate.executeUpdate();
 
         return "DELETE_SUCCESS";
