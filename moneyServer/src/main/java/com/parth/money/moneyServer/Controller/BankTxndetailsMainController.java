@@ -1,21 +1,22 @@
 package com.parth.money.moneyServer.Controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.parth.money.moneyServer.Entity.*;
 import com.parth.money.moneyServer.Repository.BankTxnDetailsMainRepository;
 import com.parth.money.moneyServer.Repository.CreditCardTopTxnDetailsMainRepository;
 import com.parth.money.moneyServer.Repository.MoneyServerPropertiesDataRepository;
 import com.parth.money.moneyServer.Utils.BankSummaryUtility;
+import com.parth.money.moneyServer.Utils.PreloaderRedisCache;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 
 @RestController
 @RequestMapping("/moneyServer/BankTxnDetails")
@@ -36,6 +37,15 @@ public class BankTxndetailsMainController {
     @Autowired
     EntityManager entityManager;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Autowired
+    StringRedisTemplate redisTemplate;
+
+    @Autowired
+    PreloaderRedisCache preloaderRedisCache;
+
     List<String> months = Arrays.asList(
             "January", "February", "March", "April",
             "May", "June", "July", "August",
@@ -48,20 +58,53 @@ public class BankTxndetailsMainController {
     public BankTxnDetailsMain getTxnbyId(@PathVariable String id){
         return bankTxnDetailsMainRepository.findByBanktxnId(id);
     }
+
+    // Redis cache Enable
     @GetMapping("/txn/allTxns")
     public List<BankTxnDetailsMain> getAll(){
-        List<BankTxnDetailsMain> returnList =  bankTxnDetailsMainRepository.findAll();
-        Collections.sort(returnList, Comparator.comparing(BankTxnDetailsMain::getBankTxnBillingYearINTEGER,Comparator.reverseOrder())
-                .thenComparing(BankTxnDetailsMain::getBankTxnBillingMonthINTEGER,Comparator.reverseOrder()).thenComparing(BankTxnDetailsMain::getBanktxnBillingDateINTEGER,Comparator.reverseOrder()).thenComparing(BankTxnDetailsMain::getBankTxnSeqNumOrder,Comparator.reverseOrder()));
-        return returnList;
+        List<BankTxnDetailsMain> returnList;
+        try{
+            if(Boolean.TRUE.equals(redisTemplate.hasKey("allBankTXN"))){
+                String json = (String) redisTemplate.opsForValue().get("allBankTXN");
+                returnList = objectMapper.readValue(json, new TypeReference<List<BankTxnDetailsMain>>() {});
+                return returnList;
+            }else{
+                returnList =  bankTxnDetailsMainRepository.findAll();
+                Collections.sort(returnList, Comparator.comparing(BankTxnDetailsMain::getBankTxnBillingYearINTEGER,Comparator.reverseOrder())
+                        .thenComparing(BankTxnDetailsMain::getBankTxnBillingMonthINTEGER,Comparator.reverseOrder()).thenComparing(BankTxnDetailsMain::getBanktxnBillingDateINTEGER,Comparator.reverseOrder()).thenComparing(BankTxnDetailsMain::getBankTxnSeqNumOrder,Comparator.reverseOrder()));
+                String json = objectMapper.writeValueAsString(returnList);
+                redisTemplate.opsForValue().set("allBankTXN", json);
+                System.out.println("preloaded redis cache for key : allBankTXN");
+                return returnList;
+            }
+        }catch(Exception e){
+            System.out.println("Exception during BankTxndetailsMainController.getAll() ... E = "+e);
+        }
+        return new ArrayList<>();
     }
 
+    // Redis cache Enable
     @GetMapping("/txn")
     public List<BankTxnDetailsMain> getTxnbyMonthAndYear(@RequestParam String month, @RequestParam String year){
-        List<BankTxnDetailsMain> returnList = bankTxnDetailsMainRepository.findByBanktxnBillingMonthAndBanktxnBillingYear(month,year);
-        Collections.sort(returnList, Comparator.comparing(BankTxnDetailsMain::getBankTxnBillingYearINTEGER,Comparator.reverseOrder())
-                .thenComparing(BankTxnDetailsMain::getBankTxnBillingMonthINTEGER,Comparator.reverseOrder()).thenComparing(BankTxnDetailsMain::getBanktxnBillingDateINTEGER,Comparator.reverseOrder()).thenComparing(BankTxnDetailsMain::getBankTxnSeqNumOrder,Comparator.reverseOrder()));
-        return returnList;
+        List<BankTxnDetailsMain> returnList;
+        try{
+            String dataKey = month.trim() + "-" + year.trim() + "-" + "bankTXN";
+            if(Boolean.TRUE.equals(redisTemplate.hasKey(dataKey))){
+                String json = (String) redisTemplate.opsForValue().get(dataKey);
+                returnList = objectMapper.readValue(json, new TypeReference<List<BankTxnDetailsMain>>() {});
+                return returnList;
+            }else{
+                returnList = bankTxnDetailsMainRepository.findByBanktxnBillingMonthAndBanktxnBillingYear(month,year);
+                Collections.sort(returnList, Comparator.comparing(BankTxnDetailsMain::getBankTxnBillingYearINTEGER,Comparator.reverseOrder())
+                        .thenComparing(BankTxnDetailsMain::getBankTxnBillingMonthINTEGER,Comparator.reverseOrder()).thenComparing(BankTxnDetailsMain::getBanktxnBillingDateINTEGER,Comparator.reverseOrder()).thenComparing(BankTxnDetailsMain::getBankTxnSeqNumOrder,Comparator.reverseOrder()));
+                String json = objectMapper.writeValueAsString(returnList);
+                redisTemplate.opsForValue().set(dataKey, json);
+                System.out.println("preloaded redis cache for key : "+dataKey);
+            }
+        }catch(Exception e){
+            System.out.println("Exception during BankTxndetailsMainController.getTxnbyMonthAndYear() ... E = "+e);
+        }
+        return new ArrayList<>();
     }
 
     @GetMapping("/txn/Summary")
@@ -75,15 +118,29 @@ public class BankTxndetailsMainController {
         return bankSummaryUtility.getSummarylist();
     }
 
+    // Redis cache Enable
     @GetMapping("/txn/avlBal")
     public BigDecimal getAvlBalFromAccName(@RequestParam String bankAccName){
-        String avlBal = moneyServerPropertiesDataRepository.findById(bankAccName).getValue();
-        return new BigDecimal(avlBal);
+        String avlBal;
+        try{
+            if(Boolean.TRUE.equals(redisTemplate.hasKey(bankAccName))){
+                avlBal = (String) redisTemplate.opsForValue().get(bankAccName);
+                return new BigDecimal(avlBal);
+            }else{
+                avlBal = moneyServerPropertiesDataRepository.findById(bankAccName).getValue();
+                redisTemplate.opsForValue().set(bankAccName, avlBal);
+                return new BigDecimal(avlBal);
+            }
+        }catch (Exception e){
+            System.out.println("Exception during BankTxndetailsMainController.getAvlBalFromAccName() ... E = "+e);
+        }
+        return new BigDecimal(-1);
     }
 
 
 
     // POST txns
+    // Redis cache Enable
     @Transactional
     @PostMapping("/txn")
     public BankTxnDetailsMain addNewTxn(@RequestBody BankTxnDetailsMain entity){
@@ -388,11 +445,13 @@ public class BankTxndetailsMainController {
         queryAvlBalupdate.setParameter("newData",floatAvlBal.toString());
         queryAvlBalupdate.executeUpdate();
 
+        preloaderRedisCache.preloadRedisCache_BankTXN();
         return returnEntity;
     }
 
 
     //DELETE txns
+    // Redis cache Enable
     @Transactional
     @DeleteMapping("/txn/txnDeleteNormal/{id}")
     public String txnDeleteNormal(@PathVariable String id){
@@ -434,7 +493,7 @@ public class BankTxndetailsMainController {
         queryAvlBalupdate.setParameter("id",bankAccName+"-OD");
         queryAvlBalupdate.setParameter("newData",floatODAvlBaltemp.toString());
         queryAvlBalupdate.executeUpdate();
-
+        preloaderRedisCache.preloadRedisCache_BankTXN();
         return "DELETE_SUCCESS";
     }
 

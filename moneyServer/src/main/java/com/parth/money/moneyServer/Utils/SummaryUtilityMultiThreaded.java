@@ -31,6 +31,10 @@ public class SummaryUtilityMultiThreaded {
             "September", "October", "November", "December"
     );
 
+    public List<String> getMonths() {
+        return months;
+    }
+
     public List<SummaryModel> getSummarylist() throws Exception{
         int startMonthinDB = months.indexOf("September");
         String startYearinDB = "2023";

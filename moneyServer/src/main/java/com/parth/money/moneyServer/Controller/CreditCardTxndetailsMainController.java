@@ -1,5 +1,7 @@
 package com.parth.money.moneyServer.Controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.parth.money.moneyServer.Entity.CreditCardTopTxnDetailsMain;
 import com.parth.money.moneyServer.Entity.CreditCardTxnDetailsMain;
 import com.parth.money.moneyServer.Entity.SummaryModel;
@@ -7,17 +9,17 @@ import com.parth.money.moneyServer.Repository.CreditCardTopTxnDetailsMainReposit
 import com.parth.money.moneyServer.Repository.CreditCardTxnDetailsMainRepository;
 import com.parth.money.moneyServer.Repository.MoneyServerPropertiesDataRepository;
 import com.parth.money.moneyServer.Utils.CCEmiUtility;
+import com.parth.money.moneyServer.Utils.PreloaderRedisCache;
 import com.parth.money.moneyServer.Utils.SummaryUtility;
 import com.parth.money.moneyServer.Utils.SummaryUtilityMultiThreaded;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 
 import java.util.*;
 
@@ -35,6 +37,9 @@ public class CreditCardTxndetailsMainController {
     CreditCardTopTxnDetailsMainRepository creditCardTopTxnDetailsMainRepository;
 
     @Autowired
+    PreloaderRedisCache preloaderRedisCache;
+
+    @Autowired
     CCEmiUtility ccEmiUtility;
 
     @Autowired
@@ -42,6 +47,13 @@ public class CreditCardTxndetailsMainController {
 
     @Autowired
     SummaryUtilityMultiThreaded summaryUtilityMultiThreaded;
+
+    @Autowired
+    StringRedisTemplate redisTemplate;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
 
     @Autowired
     EntityManager entityManager;
@@ -59,20 +71,53 @@ public class CreditCardTxndetailsMainController {
         return creditCardTxnDetailsMainRepository.findByTxnId(id);
     }
 
+    // Redis cache Enable
     @GetMapping("/txn/allTxns")
     public List<CreditCardTxnDetailsMain> getAll(){
-        List<CreditCardTxnDetailsMain> returnList =  creditCardTxnDetailsMainRepository.findAll();
-        Collections.sort(returnList, Comparator.comparing(CreditCardTxnDetailsMain::getTxnBillingYearINTEGER,Comparator.reverseOrder())
-                .thenComparing(CreditCardTxnDetailsMain::getTxnBillingMonthINTEGER,Comparator.reverseOrder()));
-        return returnList;
+        List<CreditCardTxnDetailsMain> returnList;
+        try{
+            if(Boolean.TRUE.equals(redisTemplate.hasKey("allccTXN"))){
+                String json = (String) redisTemplate.opsForValue().get("allccTXN");
+                returnList = objectMapper.readValue(json, new TypeReference<List<CreditCardTxnDetailsMain>>() {});
+                return returnList;
+            }else{
+                returnList =  creditCardTxnDetailsMainRepository.findAll();
+                Collections.sort(returnList, Comparator.comparing(CreditCardTxnDetailsMain::getTxnBillingYearINTEGER,Comparator.reverseOrder())
+                        .thenComparing(CreditCardTxnDetailsMain::getTxnBillingMonthINTEGER,Comparator.reverseOrder()));
+                String json = objectMapper.writeValueAsString(returnList);
+                redisTemplate.opsForValue().set("allccTXN", json);
+                System.out.println("preloaded redis cache for key : allccTXN");
+                return returnList;
+            }
+        }catch (Exception e){
+            System.out.println("Exception during CreditCardTxndetailsMainController.getAll() ... E = "+e);
+        }
+        return new ArrayList<>();
     }
 
+    // Redis cache Enable
     @GetMapping("/txn")
     public List<CreditCardTxnDetailsMain> getTxnbyMonthAndYear(@RequestParam String month, @RequestParam String year){
-        List<CreditCardTxnDetailsMain> returnList = creditCardTxnDetailsMainRepository.findByTxnBillingMonthAndTxnBillingYear(month,year);
-        Collections.sort(returnList, Comparator.comparing(CreditCardTxnDetailsMain::getTxnBillingYearINTEGER,Comparator.reverseOrder())
-                .thenComparing(CreditCardTxnDetailsMain::getTxnBillingMonthINTEGER,Comparator.reverseOrder()));
-        return returnList;
+        List<CreditCardTxnDetailsMain> returnList;
+        try{
+            String dataKey = month.trim() + "-" + year.trim() + "-" + "ccTXN";
+            if(Boolean.TRUE.equals(redisTemplate.hasKey(dataKey))){
+                String json = (String) redisTemplate.opsForValue().get(dataKey);
+                returnList = objectMapper.readValue(json, new TypeReference<List<CreditCardTxnDetailsMain>>() {});
+                return returnList;
+            }else{
+                returnList = creditCardTxnDetailsMainRepository.findByTxnBillingMonthAndTxnBillingYear(month,year);
+                Collections.sort(returnList, Comparator.comparing(CreditCardTxnDetailsMain::getTxnBillingYearINTEGER,Comparator.reverseOrder())
+                        .thenComparing(CreditCardTxnDetailsMain::getTxnBillingMonthINTEGER,Comparator.reverseOrder()));
+                String json = objectMapper.writeValueAsString(returnList);
+                redisTemplate.opsForValue().set(dataKey, json);
+                System.out.println("preloaded redis cache for key : "+dataKey);
+                return returnList;
+            }
+        } catch (Exception e){
+            System.out.println("Exception during CreditCardTxndetailsMainController.getTxnbyMonthAndYear() ... E = "+e);
+        }
+        return new ArrayList<>();
     }
 
     @GetMapping("/txn/Summary")
@@ -80,44 +125,75 @@ public class CreditCardTxndetailsMainController {
                                                  @RequestParam(value="year",required=false,defaultValue="X")String year,
                                                  @RequestParam(value="multithreaded",required=false,defaultValue="true") String multithreaded){
         SummaryModel summaryModel;
-        if(multithreaded.equals("true")){
-            summaryModel = summaryUtilityMultiThreaded.getSummaryFromTxns(month,year);
-        }else if(multithreaded.equals("false")){
-            summaryModel = summaryUtility.getSummaryFromTxns(month,year);
-        }else{
+        try{
+            if(multithreaded.equals("true")){
+                summaryModel = summaryUtilityMultiThreaded.getSummaryFromTxns(month,year);
+            }else if(multithreaded.equals("false")){
+                summaryModel = summaryUtility.getSummaryFromTxns(month,year);
+            }else{
+                return new SummaryModel();
+            }
+            return summaryModel;
+        }catch(Exception e){
+            System.out.println("Exception during CreditCardTxndetailsMainController.getSummaryAlltxns() ... E = "+e);
             return new SummaryModel();
         }
-        return summaryModel;
     }
 
+    // Redis cache Enable
     @GetMapping("/txn/Summary/allTxns")
     public List<SummaryModel> getSummaryAlltxns(@RequestParam(value="multithreaded",required=false,defaultValue="true") String multithreaded){
         List<SummaryModel> returnData;
         try{
-            if(multithreaded.equals("true")){
-                returnData = summaryUtilityMultiThreaded.getSummarylist();
-            }else if(multithreaded.equals("false")){
-                returnData = summaryUtility.getSummarylist();
+            if(Boolean.TRUE.equals(redisTemplate.hasKey("allccTXNsummary"))){
+                String json = (String) redisTemplate.opsForValue().get("allccTXNsummary");
+                returnData = objectMapper.readValue(json, new TypeReference<List<SummaryModel>>() {});
+                return returnData;
             }else{
-                return new ArrayList<>();
+                if(multithreaded.equals("true")){
+                    returnData = summaryUtilityMultiThreaded.getSummarylist();
+                }else if(multithreaded.equals("false")) {
+                    returnData = summaryUtility.getSummarylist();
+                }else{
+                    returnData = summaryUtilityMultiThreaded.getSummarylist();
+                }
+                String json = objectMapper.writeValueAsString(returnData);
+                redisTemplate.opsForValue().set("allccTXNsummary", json);
+                System.out.println("preloaded redis cache for key : allccTXNsummary");
+                return returnData;
             }
-            return returnData;
         }catch(Exception e){
+            System.out.println("Exception during CreditCardTxndetailsMainController.getSummaryAlltxns() ... E = "+e);
+            return new ArrayList<>();
+        }
+    }
+
+    // Redis cache Enable
+    @GetMapping("/txn/Toptxns/allTxns")
+    public List<CreditCardTopTxnDetailsMain> getAllTopTxns(){
+        List<CreditCardTopTxnDetailsMain> returnList;
+        try{
+            if(Boolean.TRUE.equals(redisTemplate.hasKey("allccTXNtop"))){
+                String json = (String) redisTemplate.opsForValue().get("allccTXNtop");
+                returnList = objectMapper.readValue(json, new TypeReference<List<CreditCardTopTxnDetailsMain>>() {});
+                return returnList;
+            }else{
+                returnList = creditCardTopTxnDetailsMainRepository.findAll();
+                Collections.sort(returnList,Comparator.comparing(CreditCardTopTxnDetailsMain::getTxnAmount).reversed());
+                String json = objectMapper.writeValueAsString(returnList);
+                redisTemplate.opsForValue().set("allccTXNtop", json);
+                System.out.println("preloaded redis cache for key : allccTXNtop");
+                return returnList;
+            }
+        }catch(Exception e){
+            System.out.println("Exception during CreditCardTxndetailsMainController.getAllTopTxns() ... E = "+e);
             return new ArrayList<>();
         }
     }
 
 
-    @GetMapping("/txn/Toptxns/allTxns")
-    public List<CreditCardTopTxnDetailsMain> getAllTopTxns(){
-        List<CreditCardTopTxnDetailsMain> returnList = creditCardTopTxnDetailsMainRepository.findAll();
-        Collections.sort(returnList,Comparator.comparing(CreditCardTopTxnDetailsMain::getTxnAmount).reversed());
-        return returnList;
-    }
-
-
-
     // POST txns
+    // Redis cache Enable
     @Transactional
     @PostMapping("/txn")
     public CreditCardTxnDetailsMain addNewTxn(@RequestBody CreditCardTxnDetailsMain entity){
@@ -212,10 +288,11 @@ public class CreditCardTxndetailsMainController {
         topTxnEntity.setTxnAmount(returnEntity.getTxnAmount());
         topTxnEntity.setCcorbank("C");
         creditCardTopTxnDetailsMainRepository.save(topTxnEntity);
-
+        preloaderRedisCache.preloadRedisCache_CreditCardsTXN();
         return returnEntity;
     }
 
+    // Redis cache Enable
     @Transactional
     @PostMapping("/txn/addEMItxn")
     public List<CreditCardTxnDetailsMain> addEMItxn(@RequestParam Integer noOfEMIs, @RequestBody CreditCardTxnDetailsMain entity){
@@ -316,12 +393,13 @@ public class CreditCardTxndetailsMainController {
         topTxnEntity.setTxnAmount(returnList.get(0).getTxnAmount().multiply(noOfEmisBIGDECIMAL));
         topTxnEntity.setCcorbank("C");
         creditCardTopTxnDetailsMainRepository.save(topTxnEntity);
-
+        preloaderRedisCache.preloadRedisCache_CreditCardsTXN();
         return returnList;
     }
 
 
     //DELETE txns
+    // Redis cache Enable
     @Transactional
     @DeleteMapping("/txn/txnDeleteNormal/{id}")
     public String txnDeleteNormal(@PathVariable String id){
@@ -377,9 +455,11 @@ public class CreditCardTxndetailsMainController {
         }
         creditCardTxnDetailsMainRepository.deleteByCCid(id);
         creditCardTopTxnDetailsMainRepository.deleteTopTxnByCCid(id);
+        preloaderRedisCache.preloadRedisCache_CreditCardsTXN();
         return "DELETE_SUCCESS";
     }
 
+    // Redis cache Enable
     @Transactional
     @DeleteMapping("/txn/txnDeleteEmi/{id}")
     public String txnDeleteEmi(@PathVariable String id){
@@ -436,6 +516,7 @@ public class CreditCardTxndetailsMainController {
         String emiId = responseFromID.getTxnEmiId();
         creditCardTxnDetailsMainRepository.deleteByCCEMIid(emiId);
         creditCardTopTxnDetailsMainRepository.deleteTopTxnByCCEMIid(emiId);
+        preloaderRedisCache.preloadRedisCache_CreditCardsTXN();
         return "DELETE_SUCCESS";
     }
 
