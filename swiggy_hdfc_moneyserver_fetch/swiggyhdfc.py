@@ -24,7 +24,15 @@ def is_debit(currDataString):
         return True
 def extract_amount(currDataString):
     index = 0
-    while(currDataString[index] != 'C'):
+    while (
+        index < len(currDataString) - 1 and
+        not (
+            index > 0 and
+            currDataString[index - 1] == ' ' and 
+            currDataString[index] == 'C' and 
+            currDataString[index + 1] == ' '
+        )
+    ):
         index += 1
     index += 2
     amountString = ""
@@ -34,9 +42,9 @@ def extract_amount(currDataString):
     return amountString
 def extract_platform(currDataString):
     currDataStringALPHA = re.sub(r'\d', '', currDataString).lower()
-    if "swiggy" in currDataStringALPHA or "instamart" in currDataStringALPHA:
+    if "swiggy" in currDataStringALPHA or "instamart" in currDataStringALPHA or 'bundl' in currDataStringALPHA:
         return "Swiggy"
-    elif "zomato" in currDataStringALPHA:
+    elif "zomato" in currDataStringALPHA or 'bistro' in currDataStringALPHA:
         return "Zomato"
 def is_date_between(target_date,start_date,end_date):
     target =  datetime.datetime.strptime(target_date, "%d/%m/%Y")
@@ -102,9 +110,22 @@ def fetch_swiggy_txndb(cookie,start_date,end_date):
         return swiggyTxnHashMap
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-def sendToMoneyserver(txndate,txnamt,txndetails):
-    url = "https://www.swiggy.com/dapi/order/all?order_id="
-def hdfc_swiggy_cc_statement_extractor(pdf_path,pdf_password):
+def sendToMoneyserver(txnmonthBill,txnyearBill,txnamt,txndetails):
+    print("sending to moneyserver....")
+    url = "http://ip:port/parth-moneyserver-services/moneyServer/CreditCardTxnDetails/txn"
+    payload = {
+        "txnBillingMonth": txnmonthBill,
+        "txnBillingYear" : txnyearBill,
+        "txnCCused" : "Swiggy HDFC Visa",
+        "txnDetails" : txndetails,
+        "txnAmount" : float(txnamt),
+        "txnIsEmi" : False
+    }
+    response = requests.post(url, json=payload)
+    print(f"Status Code: {response.status_code}")
+    print(f"Response Content (JSON): {response.json()}")
+    print("###################################################################################################")
+def hdfc_swiggy_cc_statement_extractor(pdf_path,pdf_password,moneyserverMonth,moneyserverYear):
     try:
         with pdfplumber.open(pdf_path, password=pdf_password) as pdf:
             total_pages = len(pdf.pages)
@@ -120,6 +141,8 @@ def hdfc_swiggy_cc_statement_extractor(pdf_path,pdf_password):
                     if index == 0:
                         index+=1
                         continue
+                    if item[0] == None and 'Cashback' in item[1]:
+                        break
                     currDataString = ""
                     if currpagenumber == 0 and index == 1:
                         currDataString = item[0][16:]
@@ -153,7 +176,7 @@ def hdfc_swiggy_cc_statement_extractor(pdf_path,pdf_password):
                                         swiggyTxnHashMap[cctxndate][cctxnamt][indexx][1] = True
                                         cctxn[2] = True
                                         cctxndetails = swiggyTxnHashMap[cctxndate][cctxnamt][indexx][0]
-                                        sendToMoneyserver(cctxndate,cctxnamt,cctxndetails)
+                                        sendToMoneyserver(moneyserverMonth,moneyserverYear,cctxnamt,cctxndetails)
                                     indexx += 1
             print("MANUAL ENTRY NEEDED FOR BELOW TXNS : ")
             for cctxndate in txnDataHashmap:
@@ -168,4 +191,4 @@ def hdfc_swiggy_cc_statement_extractor(pdf_path,pdf_password):
 if __name__ == "__main__":
     pdf_path = "hdfc swiggy cc statement" 
     pdf_password = "pass" 
-    hdfc_swiggy_cc_statement_extractor(pdf_path,pdf_password)
+    hdfc_swiggy_cc_statement_extractor(pdf_path,pdf_password,"November","2025")
