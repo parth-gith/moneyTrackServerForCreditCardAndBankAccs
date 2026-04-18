@@ -1,47 +1,43 @@
-import { useMemo, useState } from "react";
+import { useState, useEffect } from "react";
 
-type RawRow = [string, string];
+type RawRow = [number, string, number, number, string, string, string];
 type Row = {
   id: number;
+  day: number;
+  month: string;
+  year: number;
+  seqno: number;
   amount: string;
   desc: string;
+  saveStateRowId: string;
   dirty?: boolean;
   locked?: boolean;
 };
 
-const UPLOAD_URL_RUPAY_HDFC = "/api-rupay";    
-const UPLOAD_URL_REGALIA_GOLD_HDFC = "/api-regaliagoldhdfc";          
-const UPLOAD_URL_SWIGGY_HDFC = "/api-swiggyhdfc";  
-const PUSH_URL = "/api-push-moneyserver";    
+const PUSH_URL_BANK = "/api-push-moneyserverbank";
+const UPLOAD_URL_HDFC_SAVINGS = "/api-hdfcsavings";
+const SAVE_STATE_BASE_URL = "/saveStateBase"
 
-export default function Transactions() {
+export default function BankTransactions() {
   const [rows, setRows] = useState<Row[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [card, setCard] = useState<string>("");
-  const [month, setMonth] = useState<string>("");
-  const [year, setYear] = useState<string>("");
   const [pushing, setPushing] = useState(false);
   const [pushMsg, setPushMsg] = useState<string | null>(null);
   const [pushErr, setPushErr] = useState<string | null>(null);
-  const months = [
-    { v: "01", label: "January" }, { v: "02", label: "February" },
-    { v: "03", label: "March" },   { v: "04", label: "April" },
-    { v: "05", label: "May" },     { v: "06", label: "June" },
-    { v: "07", label: "July" },    { v: "08", label: "August" },
-    { v: "09", label: "September"},{ v: "10", label: "October" },
-    { v: "11", label: "November" },{ v: "12", label: "December" },
-  ];
-  const years = useMemo(() => {
-    const y = new Date().getFullYear();
-    const arr: number[] = [];
-    for (let k = y + 1; k >= y - 6; k--) arr.push(k);
-    return arr;
-  }, []);
-  const cardOptions = ["Rupay HDFC","HDFC Regalia Gold MasterCard-WORLD","Swiggy HDFC Visa"];
+  const [savingState, setsavingState] = useState(false);
 
-
+  useEffect(() => {
+      if (!rows.length ) return;
+      const interval = setInterval(() => {
+        if (!savingState) {
+          moneyserverSaveStateRefresh(true);
+        }
+      }, 30000); // 30 sec
+  
+      return () => clearInterval(interval);
+  }, [rows.length, savingState]);
 
   async function onUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -51,36 +47,18 @@ export default function Transactions() {
     try {
       const form = new FormData();
       form.append("file", file, file.name);
-      let cardName = ""
-      if(card){
-        switch(card){
-          case cardOptions[0]:
-            cardName = UPLOAD_URL_RUPAY_HDFC
-            break
-          case cardOptions[1]:
-            cardName = UPLOAD_URL_REGALIA_GOLD_HDFC
-            break
-          case cardOptions[2]:
-            if(year && month){
-              cardName = UPLOAD_URL_SWIGGY_HDFC +"?swiggyCard_year=" + year + "&swiggyCard_month=" + months.find(m => m.v === month)?.label || ""
-            }else{
-              throw new Error("Year and Month Mandatory for Swiggy HDFC card");
-            }
-            break
-        }
-      }else if(card == null){
-        throw new Error("Null Card");
-      }
-      if(cardName == ""){
-        throw new Error("Invalid Card");
-      }
-      const res = await fetch(cardName, { method: "POST", body: form });
+      const res = await fetch(UPLOAD_URL_HDFC_SAVINGS, { method: "POST", body: form });
       if (!res.ok) throw new Error(await res.text());
       const data: RawRow[] = await res.json();
-      const mapped: Row[] = data.map(([amt, desc], i) => ({
+      const mapped: Row[] = data.map(([day, month, year, seq , amt, desc,saveStateRowId], i) => ({
         id: i,
+        day: day,
+        month: month,
+        year: year,
+        seqno: seq,
         amount: amt,
-        desc,
+        desc: desc,
+        saveStateRowId,
         dirty: false,
         locked: false,
       }));
@@ -113,7 +91,7 @@ export default function Transactions() {
     setRows(prev => prev.filter(r => r.id !== id).map((r, i) => ({ ...r, id: i })));
   }
 
-  const canPush = rows.length > 0 && card && month && year && !pushing;
+  const canPush = rows.length > 0 && !pushing;
 
   async function onPushToMoneyServer() {
     setPushMsg(null);
@@ -123,14 +101,15 @@ export default function Transactions() {
       setPushing(true);
       for (const r of rows) {
         const payload = {
-          txnBillingMonth: months.find(m => m.v === month)?.label || "",
-          txnBillingYear: year,
-          txnCCused: card,
-          txnDetails: r.desc,
-          txnAmount: parseFloat(r.amount),
-          txnIsEmi: false,
+          banktxnBillingMonth: r.month,
+          banktxnBillingYear: r.year,
+          banktxnBillingDate: r.day,
+          bankAccName: "HDFC Bank Salary Account",
+          banktxnDetails: r.desc,
+          banktxnAmount: parseFloat(r.amount),
+          bankTxnSeqNumOrder: r.seqno,
         };
-        const res = await fetch(PUSH_URL, {
+        const res = await fetch(PUSH_URL_BANK, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -141,6 +120,7 @@ export default function Transactions() {
         }
       }
       setPushMsg("All transactions pushed to MoneyServer successfully.");
+      moneyserverSaveStateMarkAUDIT()
     } catch (e: any) {
       setPushErr(e?.message || "Push failed");
     } finally {
@@ -148,9 +128,74 @@ export default function Transactions() {
     }
   }
 
+  async function moneyserverSaveStateRefresh(autosaveJob: boolean){
+    try{
+      setsavingState(true)
+      const dateTime = new Date().toLocaleString([], {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      const payload = {
+        saveStateId: "hdfcsavings-bank",
+        saveStateType: "BANK",
+        lastUpdated: String(dateTime),
+        saveStateRows: rows.map((r) => ({
+          saveStateRowId: r.saveStateRowId,
+          txnAmount: parseFloat(r.amount),
+          txnDetail: r.desc,
+          bankTxnMonth: r.month,
+          bankTxnYear: r.year,
+          bankTxnDay: r.day,
+          bankTxnSeqNo: r.seqno,
+        })),
+      };
+      const res = await fetch(SAVE_STATE_BASE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error(`saveState refresh failed during post request : ${t}`);
+      }
+      if(autosaveJob == false){
+        setPushMsg(`Manual saveState refresh was successful at ${dateTime}.`);
+      }else{
+        setPushMsg(`Auto saveState refresh was successful at ${dateTime}.`);
+      }
+    }catch(e: any){
+      setPushErr(e?.message || "saveState refresh failed - exception");
+    }finally{
+      setsavingState(false)
+    }
+  }
+
+  async function moneyserverSaveStateMarkAUDIT(){
+    setPushMsg(null);
+    setPushErr(null);
+    try{
+      
+      const res = await fetch(SAVE_STATE_BASE_URL + "/hdfcsavings-bank/markAsAudit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error(`saveState markAudit failed during post request : ${t}`);
+      }
+      setPushMsg("All transactions pushed to MoneyServer successfully. saveState record marked as audit.");
+    }catch(e: any){
+      setPushErr(e?.message || "saveState mark audit failed - exception");
+    }
+  }
+
   return (
     <div>
-      <h2 style={{ fontWeight: 700, marginBottom: 12, paddingLeft: "14px" }}>Transactions</h2>
+      <h2 style={{ fontWeight: 700, marginBottom: 12, paddingLeft: "14px" }}>Bank Transactions</h2>
 
       <form
         onSubmit={onUpload}
@@ -158,7 +203,7 @@ export default function Transactions() {
       >
         <input
           type="file"
-          accept="application/pdf"
+          accept=".xls"
           onChange={(e) => setFile(e.target.files?.[0] || null)}
         />
 
@@ -173,7 +218,7 @@ export default function Transactions() {
             cursor: !file || uploading ? "not-allowed" : "pointer",
           }}
         >
-          {uploading ? "Uploading…" : "Upload PDF"}
+          {uploading ? "Uploading…" : "Upload XLS"}
         </button>
 
         <button
@@ -190,32 +235,6 @@ export default function Transactions() {
           Clear
         </button>
 
-        <select
-          value={card}
-          onChange={(e) => setCard(e.target.value)}
-          style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #d0d0d0" }}
-        >
-          <option value="">Card</option>
-          {cardOptions.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-
-        <select
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-          style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #d0d0d0" }}
-        >
-          <option value="">Month</option>
-          {months.map(m => <option key={m.v} value={m.v}>{m.label}</option>)}
-        </select>
-
-        <select
-          value={year}
-          onChange={(e) => setYear(e.target.value)}
-          style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #d0d0d0" }}
-        >
-          <option value="">Year</option>
-          {years.map(y => <option key={y} value={String(y)}>{y}</option>)}
-        </select>
 
         <button
           type="button"
@@ -232,11 +251,25 @@ export default function Transactions() {
         >
           {pushing ? "Pushing…" : "Push to MoneyServer"}
         </button>
+
+        <button
+          type="button"
+          onClick={() => moneyserverSaveStateRefresh(false)}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 6,
+            border: "1px solid #bbb",
+            background: "white",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {savingState ? "Saving State..." : "Save State to MoneyServer"}
+        </button>
       </form>
 
-      {error   && <div style={{ color: "crimson", margin: "0 14px 10px 14px" }}>Error: {error}</div>}
+      {error && <div style={{ color: "crimson", margin: "0 14px 10px 14px" }}>Error: {error}</div>}
       {pushErr && <div style={{ color: "crimson", margin: "0 14px 10px 14px" }}>Push error: {pushErr}</div>}
-      {pushMsg && <div style={{ color: "green",  margin: "0 14px 10px 14px" }}>{pushMsg}</div>}
+      {pushMsg && <div style={{ color: "green", margin: "0 14px 10px 14px" }}>{pushMsg}</div>}
 
       <div
         style={{
@@ -251,21 +284,37 @@ export default function Transactions() {
           <thead>
             <tr style={{ background: "#f8f8f8" }}>
               <th style={{ textAlign: "left", padding: "10px 12px", borderBottom: "1px solid #e5e5e5", width: 160 }}>
+                Date
+              </th>
+              <th style={{ textAlign: "left", padding: "10px 12px", borderBottom: "1px solid #e5e5e5", width: 160 }}>
+                SeqNo
+              </th>
+              <th style={{ textAlign: "left", padding: "10px 12px", borderBottom: "1px solid #e5e5e5", width: 160 }}>
                 Amount
               </th>
               <th style={{ textAlign: "left", padding: "10px 12px", borderBottom: "1px solid #e5e5e5" }}>
                 Txn details
               </th>
-              
+
               <th style={{ width: 56, padding: "10px 12px", borderBottom: "1px solid #e5e5e5" }} />
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id}>
+
                 <td style={{ padding: "10px 12px", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>
+                  {r.day + "-" + r.month + "-" + r.year}
+                </td>
+
+                <td style={{ padding: "10px 12px", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>
+                  {r.seqno}
+                </td>
+
+                <td style={{ padding: "10px 12px", borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap", color: parseFloat(r.amount) < 0 ? "red" : "green", }}>
                   ₹ {r.amount}
                 </td>
+
                 <td style={{ padding: "10px 12px", borderBottom: "1px solid #f0f0f0" }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <input
@@ -317,6 +366,7 @@ export default function Transactions() {
                     {!r.locked && r.dirty && <span style={{ color: "#8a6d3b" }}>Edited (not saved)</span>}
                   </div>
                 </td>
+                
                 {/* Delete cell */}
                 <td style={{ padding: "10px 12px", borderBottom: "1px solid #f0f0f0", textAlign: "right" }}>
                   <button
@@ -337,13 +387,14 @@ export default function Transactions() {
                     ×
                   </button>
                 </td>
+
               </tr>
             ))}
 
             {rows.length === 0 && (
               <tr>
                 <td colSpan={3} style={{ padding: 12, color: "#666", textAlign: "center" }}>
-                  Upload a PDF to load transactions.
+                  Upload a XLS to load transactions.
                 </td>
               </tr>
             )}

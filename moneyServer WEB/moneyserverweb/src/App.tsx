@@ -1,8 +1,11 @@
 import { Link, Routes, Route } from "react-router-dom";
-import Transactions from "./pages/Transactions";
+import CreditCardTransactions from "./pages/CreditCardTransactions";
+import BankTransactions from "./pages/BankTransactions";
 import logo from "./assets/logo.png";
+import { useState } from "react";
 
 export default function App() {
+  const [open, setOpen] = useState(false);
   return (
     <div>
       {/* Header */}
@@ -42,20 +45,59 @@ export default function App() {
           MoneyServer Private Wealth Management
         </div>
 
-        {/* Right side */}
-        <div style={{ display: "flex", gap: "16px" }}>
-          <Link to="/transactions" style={{ textDecoration: "none", fontWeight: 500, color: "black" }}>Transactions</Link>
+        <details 
+        open={open}
+        onToggle={(e) => setOpen(e.currentTarget.open)}
+        style={{ position: "relative" }}
+        >
+        <summary
+          style={{
+            cursor: "pointer",
+            fontWeight: 500,
+            listStyle: "none",
+          }}
+        >
+          Transactions ▾
+        </summary>
+
+        <div
+          style={{
+            position: "absolute",
+            right: 0,
+            top: "120%",
+            background: "#fff",
+            border: "1px solid rgba(0,0,0,0.15)",
+            borderRadius: "6px",
+            minWidth: "210px",
+            boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
+            zIndex: 100,
+          }}
+        >
+          <Link to="/creditcardtransactions" style={menuItemStyle} onClick={() => setOpen(false)}>Credit Card Transactions</Link>
+          <Link to="/banktransactions" style={menuItemStyle} onClick={() => setOpen(false)} >Bank Transactions</Link>
         </div>
+      </details>
+
       </nav>
 
       
       {/* Main content */}
       <main style={{ paddingTop: "16px" }}>
         <Routes>
-          <Route path="/transactions" element={<Transactions />} />
-          <Route path="/" element={<Transactions />} />
+          <Route path="/creditcardtransactions" element={<CreditCardTransactions />} />
+          <Route path="/banktransactions" element={<BankTransactions />} />
+          <Route path="/" element={<CreditCardTransactions />} />
         </Routes>
       </main>
     </div>
   );
 }
+
+const menuItemStyle: React.CSSProperties = {
+  display: "block",
+  padding: "10px 12px",
+  textDecoration: "none",
+  color: "black",
+  fontWeight: 500,
+};
+

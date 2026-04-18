@@ -6,59 +6,86 @@ import json
 import datetime
 import os
 
-
+COOKIE_FILE = "swiggy_cookie.txt"
+def get_swiggy_cookie():
+    if not os.path.exists(COOKIE_FILE):
+        return None
+    with open(COOKIE_FILE, "r") as f:
+        return f.read()
 def extract_date(currDataString):
-    dateString = ""
-    for c in currDataString:
-        if c != '|':
-            dateString+=c
-        else:
-            break
-    return dateString
+    try:
+        dateString = ""
+        for c in currDataString:
+            if c != '|':
+                dateString+=c
+            else:
+                break
+        return dateString
+    except Exception as e:
+        print(f"An unexpected error occurred during swiggymain.extract_date(): {e}")
+        return "InvalidDate"
 def is_debit(currDataString):
-    index = len(currDataString) - 1
-    while(currDataString[index] != 'C'):
-        index -= 1
-    if currDataString[index-2] == '+':
-        return False
-    else:
+    try:
+        index = len(currDataString) - 1
+        while(currDataString[index] != 'C'):
+            index -= 1
+        if currDataString[index-2] == '+':
+            return False
+        else:
+            return True
+    except Exception as e:
+        print(f"An unexpected error occurred during swiggymain.is_debit(): {e}")
         return True
 def extract_amount(currDataString):
-    index = 0
-    while (
-        index < len(currDataString) - 1 and
-        not (
-            index > 0 and
-            currDataString[index - 1] == ' ' and 
-            currDataString[index] == 'C' and 
-            currDataString[index + 1] == ' '
-        )
-    ):
-        index += 1
-    index += 2
-    amountString = ""
-    while(currDataString[index] != ' '):
-        amountString += currDataString[index]
-        index += 1
-    return amountString
+    try:
+        index = 0
+        while (
+            index < len(currDataString) - 1 and
+            not (
+                index > 0 and
+                currDataString[index - 1] == ' ' and 
+                currDataString[index] == 'C' and 
+                currDataString[index + 1] == ' '
+            )
+        ):
+            index += 1
+        index += 2
+        amountString = ""
+        while(currDataString[index] != ' '):
+            amountString += currDataString[index]
+            index += 1
+        return amountString
+    except Exception as e:
+        print(f"An unexpected error occurred during swiggymain.extract_amount(): {e}")
+        return "0.0"
 def extract_platform(currDataString):
-    currDataStringALPHA = re.sub(r'\d', '', currDataString).lower()
-    if "swiggy" in currDataStringALPHA or "instamart" in currDataStringALPHA or 'bundl' in currDataStringALPHA:
-        return "Swiggy"
-    elif "zomato" in currDataStringALPHA or 'bistro' in currDataStringALPHA:
-        return "Zomato"
+    try:
+        currDataStringALPHA = re.sub(r'\d', '', currDataString).lower()
+        if "swiggy" in currDataStringALPHA or "instamart" in currDataStringALPHA or 'bundl' in currDataStringALPHA:
+            return "Swiggy"
+        elif "zomato" in currDataStringALPHA or 'bistro' in currDataStringALPHA:
+            return "Zomato"
+        else:
+            return "NotConfigured"
+    except Exception as e:
+        print(f"An unexpected error occurred during swiggymain.extract_platform(): {e}")
+        return "Exception"
 def is_date_between(target_date,start_date,end_date):
-    target =  datetime.datetime.strptime(target_date, "%d/%m/%Y")
-    start =  datetime.datetime.strptime(start_date, "%d/%m/%Y")
-    end =  datetime.datetime.strptime(end_date, "%d/%m/%Y")
-    if start <= target <= end:
-        return [True,False,False]
-    else:
-        if target < start:
-            # tuple of bool , before start, after end
-            return [False,True,False]
-        elif target > end:
-            return [False,False,True]
+    try:
+        target =  datetime.datetime.strptime(target_date, "%d/%m/%Y")
+        start =  datetime.datetime.strptime(start_date, "%d/%m/%Y")
+        end =  datetime.datetime.strptime(end_date, "%d/%m/%Y")
+        if start <= target <= end:
+            return [True,False,False]
+        else:
+            if target < start:
+                # tuple of bool , before start, after end
+                return [False,True,False]
+            elif target > end:
+                return [False,False,True]
+    except Exception as e:
+        print(f"An unexpected error occurred during swiggymain.is_date_between(): {e}")
+        return "Exception"
 def fetch_swiggy_txndb(cookie,start_date,end_date):
     swiggyTxnHashMap = {}
     url = "https://www.swiggy.com/dapi/order/all?order_id="
@@ -80,6 +107,8 @@ def fetch_swiggy_txndb(cookie,start_date,end_date):
                 response = requests.get(url+str(lastRespId), headers=headers)
             response.raise_for_status()
             swiggy_orderes_json_data = response.json()
+            if swiggy_orderes_json_data["statusCode"] == 1 :
+                return False, None
             orders_array = swiggy_orderes_json_data["data"]["orders"]
             for order in orders_array:
                 lastRespId = order["order_id"]
@@ -108,9 +137,10 @@ def fetch_swiggy_txndb(cookie,start_date,end_date):
                         stopFetch = True
                     elif isAfterEnd == True:
                         continue
-        return swiggyTxnHashMap
+        return True, swiggyTxnHashMap
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        print(f"An unexpected error occurred during swiggymain.fetch_swiggy_txndb(): {e}")
+        return False, None
 def sendToMoneyserver(txnmonthBill,txnyearBill,txnamt,txndetails):
     print("sending to moneyserver....")
     url = "http://ip:port/parth-moneyserver-services/moneyServer/CreditCardTxnDetails/txn"
@@ -131,6 +161,7 @@ def hdfc_swiggy_cc_statement_extractor(pdf_path,pdf_password,moneyserverMonth,mo
         with pdfplumber.open(pdf_path, password=pdf_password) as pdf:
             total_pages = len(pdf.pages)
             txnDataHashmap = {}
+            start_date_is_set = False
             start_date = ""
             end_date = ""
             for currpagenumber in range(total_pages):
@@ -154,17 +185,20 @@ def hdfc_swiggy_cc_statement_extractor(pdf_path,pdf_password,moneyserverMonth,mo
                     if isDebit == True:
                         dateString = extract_date(currDataString)
                         end_date = dateString
-                        if currpagenumber == 0 and index == 1:
+                        if currpagenumber == 0 and start_date_is_set == False:
                             start_date = dateString
+                            start_date_is_set = True
                         amountString = extract_amount(currDataString)
                         platformString =  extract_platform(currDataString)
                         if dateString in txnDataHashmap :
-                            txnDataHashmap[dateString].append([platformString,"{:.2f}".format(float(amountString.replace(",", ""))),False])
+                            txnDataHashmap[dateString].append([platformString,"{:.2f}".format(float(amountString.replace(",", ""))),False,currDataString])
                         else:
-                            txnDataHashmap[dateString] = [[platformString,"{:.2f}".format(float(amountString.replace(",", ""))),False]]
+                            txnDataHashmap[dateString] = [[platformString,"{:.2f}".format(float(amountString.replace(",", ""))),False,currDataString]]
                     index+=1
-            cookie = "cookie"
-            swiggyTxnHashMap = fetch_swiggy_txndb(cookie,start_date,end_date)
+            cookie = get_swiggy_cookie()
+            swiggyCookieAlive , swiggyTxnHashMap = fetch_swiggy_txndb(cookie,start_date,end_date)
+            if swiggyCookieAlive == False:
+                return False, None
             for cctxndate in txnDataHashmap:
                 for cctxn in txnDataHashmap[cctxndate]:
                     if cctxn[0] == "Swiggy":
@@ -185,10 +219,11 @@ def hdfc_swiggy_cc_statement_extractor(pdf_path,pdf_password,moneyserverMonth,mo
                 for cctxn in txnDataHashmap[cctxndate]:
                     if cctxn[2] == False:
                         print(str(cctxndate) + " " + str(cctxn[0]) + " " + str(cctxn[1]))
-                        return_data.append([str(cctxn[1]),str(cctxndate) + " " + str(cctxn[0])])
-            return return_data
+                        # return_data.append([str(cctxn[1]),str(cctxndate) + " " + str(cctxn[0])])
+                        return_data.append([str(cctxn[1]),str(cctxn[3])])
+            return True, return_data
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        print(f"An unexpected error occurred during swiggymain.hdfc_swiggy_cc_statement_extractor(): {e}")
 
 
 

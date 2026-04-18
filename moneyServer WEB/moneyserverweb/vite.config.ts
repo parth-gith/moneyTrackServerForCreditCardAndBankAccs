@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api-rupay': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://ip:port',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => 
@@ -14,7 +14,7 @@ export default defineConfig({
       },
 
       '/api-regaliagoldhdfc': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://ip:port',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => 
@@ -22,21 +22,67 @@ export default defineConfig({
       },
 
       '/api-swiggyhdfc': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://ip:port',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => 
         path.replace(/^\/api-swiggyhdfc/, '/parth-moneyserver-services/moneyServer-web/getAllTxns/swiggyhdfc'),
       },
 
+      '/api-yesreserv': {
+        target: 'http://ip:port',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => 
+        path.replace(/^\/api-yesreserv/, '/parth-moneyserver-services/moneyServer-web/getAllTxns/yesreserv'),
+      },
+
+      '/api-hdfcsavings': {
+        target: 'http://ip:port',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => 
+        path.replace(/^\/api-hdfcsavings/, '/parth-moneyserver-services/moneyServer-web/getAllTxns/hdfcsavings'),
+      },
+
+      '/update-swiggy-cookie': {
+        target: 'http://ip:port',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => 
+        path.replace(/^\/update-swiggy-cookie/, '/parth-moneyserver-services/moneyServer-web/updateSwiggyCookie'),
+      },
+
+      '/api-push-moneyserverbank': {
+        target: 'http://ip:port',
+        changeOrigin: true,
+        secure: false,
+        rewrite: path =>
+          path.replace(
+            /^\/api-push-moneyserverbank/,
+            '/parth-moneyserver-services/moneyServer/BankTxnDetails/txn'
+          )
+      },
+
       '/api-push-moneyserver': {
-        target: 'http://192.168.29.179:8080',
+        target: 'http://ip:port',
         changeOrigin: true,
         secure: false,
         rewrite: path =>
           path.replace(
             /^\/api-push-moneyserver/,
             '/parth-moneyserver-services/moneyServer/CreditCardTxnDetails/txn'
+          )
+      },
+
+      '/saveStateBase': {
+        target: 'http://ip:port',
+        changeOrigin: true,
+        secure: false,
+        rewrite: path =>
+          path.replace(
+            /^\/saveStateBase/,
+            '/parth-moneyserver-services/moneyServer/saveState'
           )
       }
 
