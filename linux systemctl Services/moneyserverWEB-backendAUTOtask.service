@@ -1,0 +1,10 @@
+[Unit]
+Description= moneyserverWEB-backendAUTOtask service
+
+[Service]
+ExecStart=bash /home/parth/serverUtilsForMoneyServer/moneyserverWEB-backendAUTO.sh
+Restart=always
+RestartSec=5s
+                                                                                                              
+[Install]
+WantedBy=multi-user.target

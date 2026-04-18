@@ -1,0 +1,10 @@
+[Unit]
+Description= moneyserverWEB-uiAUTOtask service
+
+[Service]
+ExecStart=bash /home/parth/serverUtilsForMoneyServer/moneyserverWEB-uiAUTO.sh
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
