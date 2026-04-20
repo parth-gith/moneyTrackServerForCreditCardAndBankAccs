@@ -66,6 +66,9 @@ public class SaveStateController {
     }
 
     private SaveState updateExistingSaveState(SaveState existingSaveState, SaveState newSaveState) {
+        if (AUDIT_STATUS.equalsIgnoreCase(existingSaveState.getStatus())) {
+            return existingSaveState;
+        }
         existingSaveState.setStatus(LIVE_STATUS);
         if (newSaveState.getLastUpdated() != null) {
             existingSaveState.setLastUpdated(newSaveState.getLastUpdated());
