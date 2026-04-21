@@ -2,6 +2,7 @@ package com.parth.money.moneyServer.Controller;
 
 import com.parth.money.moneyServer.Entity.SaveState;
 import com.parth.money.moneyServer.Entity.SaveStateResponse;
+import com.parth.money.moneyServer.Entity.SaveStateSummaryResponse;
 import com.parth.money.moneyServer.Repository.SaveStateRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -10,9 +11,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -43,6 +46,13 @@ public class SaveStateController {
         return saveStateRepository.findBySaveStateIdAndStatus(id, LIVE_STATUS)
                 .map(saveState -> new SaveStateResponse(true, saveState))
                 .orElse(new SaveStateResponse(false, null));
+    }
+
+    @GetMapping("/saveState/live")
+    public List<SaveStateSummaryResponse> getLiveSaveStatesByType(@RequestParam String type) {
+        return saveStateRepository.findByStatusAndSaveStateType(LIVE_STATUS, type).stream()
+                .map(saveState -> new SaveStateSummaryResponse(saveState.getSaveStateId(), saveState.getLastUpdated()))
+                .toList();
     }
 
     @PostMapping("/saveState/{id}/markAsAudit")

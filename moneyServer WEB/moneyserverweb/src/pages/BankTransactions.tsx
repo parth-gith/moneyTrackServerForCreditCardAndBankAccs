@@ -14,6 +14,11 @@ type Row = {
   locked?: boolean;
 };
 
+type LiveStateRecord = {
+  id: string;
+  time: string;
+};
+
 const PUSH_URL_BANK = "/api-push-moneyserverbank";
 const UPLOAD_URL_HDFC_SAVINGS = "/api-hdfcsavings";
 const SAVE_STATE_BASE_URL = "/saveStateBase"
@@ -27,7 +32,7 @@ export default function BankTransactions() {
   const [pushMsg, setPushMsg] = useState<string | null>(null);
   const [pushErr, setPushErr] = useState<string | null>(null);
   const [savingState, setsavingState] = useState(false);
-
+  const [liveStateRows, setLiveStateRows] = useState<LiveStateRecord[]>([]);
   useEffect(() => {
       if (!rows.length ) return;
       const interval = setInterval(() => {
@@ -38,6 +43,15 @@ export default function BankTransactions() {
   
       return () => clearInterval(interval);
   }, [rows.length, savingState]);
+
+  useEffect(() => {
+    moneyserverSaveStateLiveGet();
+    const interval = setInterval(() => {
+      moneyserverSaveStateLiveGet();
+    }, 30000); // 30 sec
+
+    return () => clearInterval(interval);
+  }, []);
 
   async function onUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -70,6 +84,59 @@ export default function BankTransactions() {
     }
   }
 
+  async function onClickSaveState() {
+    try {
+      let saveStateGetById = SAVE_STATE_BASE_URL + "/hdfcsavings-bank";
+      const res = await fetch(saveStateGetById, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error(`saveState get using id failed: ${t}`);
+      }
+      const jsonData = await res.json();
+      const saveStateRows_data = jsonData.data.saveStateRows;
+      const mapped: Row[] = saveStateRows_data.map((row: any, i: number) => ({
+        id: i,
+        day: row.bankTxnDay,
+        month: row.bankTxnMonth,
+        year: row.bankTxnYear,
+        seqno: row.bankTxnSeqNo,
+        amount: String(row.txnAmount),
+        desc: row.txnDetail || "",
+        saveStateRowId: row.saveStateRowId,
+        dirty: false,
+        locked: false,
+      }));
+      setRows(mapped);
+    } catch (e: any) {
+      setPushErr(e?.message || "saveState get using id failed - exception");
+    }
+  }
+
+  async function moneyserverSaveStateLiveGet() {
+    try{
+      let saveStateLiveGetURL = SAVE_STATE_BASE_URL + "/live?type=BANK"
+      const res = await fetch(saveStateLiveGetURL, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error(`saveState live get failed during get request : ${t}`);
+      }
+      const jsonData = await res.json();
+      const data = jsonData as { saveStateId: string; lastUpdated: string }[];
+      const mapped: LiveStateRecord[] = data.map((item, i) => ({
+        id: item.saveStateId,
+        time: item.lastUpdated,
+      }));
+      setLiveStateRows(mapped);
+    }catch(e: any){
+      setPushErr(e?.message || "saveState live get failed - exception");
+    }
+  }
 
 
   function onEditDesc(id: number, value: string) {
@@ -193,8 +260,21 @@ export default function BankTransactions() {
     }
   }
 
+  const blinkStyle = {
+    animation: "blink 1s infinite"
+  };
+
   return (
     <div>
+      <style>
+        {`
+          @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+          }
+        `}
+      </style>
       <h2 style={{ fontWeight: 700, marginBottom: 12, paddingLeft: "14px" }}>Bank Transactions</h2>
 
       <form
@@ -280,6 +360,54 @@ export default function BankTransactions() {
           marginRight: "14px",
         }}
       >
+        <table style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: "12px",
+            color: "#30b424"
+          }}>
+          <tbody>
+            {liveStateRows.map((r) => (
+              <tr key={r.id}>
+                <td style={{ padding: "10px 12px", borderBottom: "1px solid #e5e5e5", whiteSpace: "nowrap" }}>
+                  <span style={blinkStyle}>
+                    ● LIVE
+                  </span>
+                  <span style={{
+                      marginLeft: "3px" 
+                    }}>
+                    | saveStateId :
+                  </span> 
+                  <span
+                    onClick={() => onClickSaveState()}
+                    style={{
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                      transition: "0.2s",
+                      marginLeft: "6px" 
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.opacity = "0.7"}
+                    onMouseLeave={(e) => e.currentTarget.style.opacity = "1"}
+                  >    
+                  {r.id}             
+                  </span>
+                </td>
+                <td style={{ padding: "10px 12px", borderBottom: "1px solid #e5e5e5", whiteSpace: "nowrap" }}>
+                  {r.time}
+                </td>
+              </tr>
+            ))}
+
+            {liveStateRows.length === 0 && (
+              <tr>
+                <td colSpan={3} style={{ padding: 12, color: "#666", textAlign: "center" }}>
+                  Currently no live saveStates available.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: "#f8f8f8" }}>

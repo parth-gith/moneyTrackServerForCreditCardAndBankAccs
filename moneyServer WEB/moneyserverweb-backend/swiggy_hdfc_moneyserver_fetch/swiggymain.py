@@ -173,7 +173,7 @@ def hdfc_swiggy_cc_statement_extractor(pdf_path,pdf_password,moneyserverMonth,mo
                     if index == 0:
                         index+=1
                         continue
-                    if item[0] == None and 'Cashback' in item[1]:
+                    if item[0] == None and 'cashback' in item[1].lower():
                         break
                     currDataString = ""
                     if currpagenumber == 0 and index == 1:

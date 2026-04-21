@@ -10,6 +10,11 @@ type Row = {
   locked?: boolean;
 };
 
+type LiveStateRecord = {
+  id: string;
+  time: string;
+};
+
 const UPLOAD_URL_RUPAY_HDFC = "/api-rupay";
 const UPLOAD_URL_REGALIA_GOLD_HDFC = "/api-regaliagoldhdfc";
 const UPLOAD_URL_SWIGGY_HDFC = "/api-swiggyhdfc";
@@ -33,6 +38,7 @@ export default function CreditCardTransactions() {
   const [showCookieModal, setShowCookieModal] = useState(false);
   const [cookieInput, setCookieInput] = useState("");
   const [onCookieSubmit, setOnCookieSubmit] = useState<(cookie: string) => void>(() => {});
+  const [liveStateRows, setLiveStateRows] = useState<LiveStateRecord[]>([]);
   const months = [
     { v: "01", label: "January" }, { v: "02", label: "February" },
     { v: "03", label: "March" }, { v: "04", label: "April" },
@@ -59,6 +65,15 @@ export default function CreditCardTransactions() {
 
     return () => clearInterval(interval);
   }, [rows.length, card, month, year, savingState]);
+
+  useEffect(() => {
+    moneyserverSaveStateLiveGet();
+    const interval = setInterval(() => {
+      moneyserverSaveStateLiveGet();
+    }, 30000); // 30 sec
+
+    return () => clearInterval(interval);
+  }, []);
 
   function openCookieModal(callback: (cookie: string) => void) {
     setOnCookieSubmit(() => callback);
@@ -139,6 +154,76 @@ export default function CreditCardTransactions() {
   }
 
 
+  async function moneyserverSaveStateLiveGet() {
+    try{
+      let saveStateLiveGetURL = SAVE_STATE_BASE_URL + "/live?type=CREDIT_CARD"
+      const res = await fetch(saveStateLiveGetURL, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error(`saveState live get failed during get request : ${t}`);
+      }
+      const jsonData = await res.json();
+      const data = jsonData as { saveStateId: string; lastUpdated: string }[];
+      const mapped: LiveStateRecord[] = data.map((item, i) => ({
+        id: item.saveStateId,
+        time: item.lastUpdated,
+      }));
+      setLiveStateRows(mapped);
+    }catch(e: any){
+      setPushErr(e?.message || "saveState live get failed - exception");
+    }
+  }
+
+  async function onClickSaveState(saveStateId: string) {
+    try {
+      let saveStateGetById = SAVE_STATE_BASE_URL + "/" + saveStateId
+      const res = await fetch(saveStateGetById, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error(`saveState get using id failed: ${t}`);
+      }
+      const jsonData = await res.json();
+      setMonth(
+        months.find(m => m.label === jsonData.data.creditCardBillMonth)?.v || ""
+      );
+      setYear(jsonData.data.creditCardBillYear);
+      const cardId = jsonData.data.saveStateId.split("-")[0];
+      switch (cardId) {
+        case "rupayhdfc":
+          setCard(cardOptions[0]);
+          break;
+        case "regaliagoldhdfc":
+          setCard(cardOptions[1]);
+          break;
+        case "swiggyhdfc":
+          setCard(cardOptions[2]);
+          break;
+        case "yesreserv":
+          setCard(cardOptions[3]);
+          break;
+      }
+      const saveStateRows_data = jsonData.data.saveStateRows;
+      const mapped: Row[] = saveStateRows_data.map((row: any, i: number) => ({
+        id: i,
+        amount: String(row.txnAmount),
+        desc: row.txnDetail,
+        saveStateRowId: row.saveStateRowId,
+        dirty: false,
+        locked: false,
+      }));
+      setRows(mapped);
+    }
+    catch(e: any){
+      setPushErr(e?.message || "saveState get using id failed - exception");
+    }
+  }
+
 
   function onEditDesc(id: number, value: string) {
     setRows(prev => prev.map(r => (r.id === id ? (r.locked ? r : { ...r, desc: value, dirty: true }) : r)));
@@ -194,6 +279,7 @@ export default function CreditCardTransactions() {
       setPushing(false);
     }
   }
+
 
   async function moneyserverSaveStateRefresh(autosaveJob: boolean){
     try{
@@ -288,8 +374,22 @@ export default function CreditCardTransactions() {
     }
   }
 
+  const blinkStyle = {
+    animation: "blink 1s infinite"
+  };
+
   return (
     <div>
+      <style>
+        {`
+          @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+          }
+        `}
+      </style>
+
       <h2 style={{ fontWeight: 700, marginBottom: 12, paddingLeft: "14px" }}>Credit Card Transactions</h2>
 
       <form
@@ -401,6 +501,54 @@ export default function CreditCardTransactions() {
           marginRight: "14px",
         }}
       >
+        <table style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: "12px",
+            color: "#30b424"
+          }}>
+          <tbody>
+            {liveStateRows.map((r) => (
+              <tr key={r.id}>
+                <td style={{ padding: "10px 12px", borderBottom: "1px solid #e5e5e5", whiteSpace: "nowrap" }}>
+                  <span style={blinkStyle}>
+                    ● LIVE
+                  </span>
+                  <span style={{
+                      marginLeft: "3px" 
+                    }}>
+                    | saveStateId :
+                  </span> 
+                  <span
+                    onClick={() => onClickSaveState(r.id)}
+                    style={{
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                      transition: "0.2s",
+                      marginLeft: "6px" 
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.opacity = "0.7"}
+                    onMouseLeave={(e) => e.currentTarget.style.opacity = "1"}
+                  >    
+                  {r.id}             
+                  </span>
+                </td>
+                <td style={{ padding: "10px 12px", borderBottom: "1px solid #e5e5e5", whiteSpace: "nowrap" }}>
+                  {r.time}
+                </td>
+              </tr>
+            ))}
+
+            {liveStateRows.length === 0 && (
+              <tr>
+                <td colSpan={3} style={{ padding: 12, color: "#666", textAlign: "center" }}>
+                  Currently no live saveStates available.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: "#f8f8f8" }}>
