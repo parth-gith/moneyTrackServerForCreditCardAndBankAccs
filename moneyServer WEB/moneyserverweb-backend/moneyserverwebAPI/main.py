@@ -137,27 +137,39 @@ def is_debit(currDataString):
     except Exception as e:
         print(f"An unexpected error occurred during main.is_debit(): {e}")
         return True
+# deprecated extract amount method below
+# def extract_amount(currDataString):
+#     try:
+#         index = 0
+#         while (
+#             index < len(currDataString) - 1 and
+#             not (
+#                 index > 0 and
+#                 currDataString[index - 1] == ' ' and 
+#                 currDataString[index] == 'C' and 
+#                 currDataString[index + 1] == ' '
+#             )
+#         ):
+#             index += 1
+#         index += 2
+#         amountString = ""
+#         if currDataString[index] == 'C':
+#             index += 2
+#         while(currDataString[index] != ' '):
+#             amountString += currDataString[index]
+#             index += 1
+#         return amountString
+#     except Exception as e:
+#         print(f"An unexpected error occurred during main.extract_amount(): {e}")
+#         return "0.0"
 def extract_amount(currDataString):
     try:
-        index = 0
-        while (
-            index < len(currDataString) - 1 and
-            not (
-                index > 0 and
-                currDataString[index - 1] == ' ' and 
-                currDataString[index] == 'C' and 
-                currDataString[index + 1] == ' '
-            )
-        ):
-            index += 1
-        index += 2
-        amountString = ""
-        if currDataString[index] == 'C':
-            index += 2
-        while(currDataString[index] != ' '):
-            amountString += currDataString[index]
-            index += 1
-        return amountString
+        idx = currDataString.rfind(" C ")
+        if idx == -1:
+            return "0.0"
+        
+        idx += 3
+        return currDataString[idx:].split()[0]
     except Exception as e:
         print(f"An unexpected error occurred during main.extract_amount(): {e}")
         return "0.0"
