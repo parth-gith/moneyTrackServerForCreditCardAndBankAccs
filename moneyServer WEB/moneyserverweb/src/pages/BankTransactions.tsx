@@ -63,7 +63,8 @@ export default function BankTransactions() {
       form.append("file", file, file.name);
       const res = await fetch(UPLOAD_URL_HDFC_SAVINGS, { method: "POST", body: form });
       if (!res.ok) throw new Error(await res.text());
-      const data: RawRow[] = await res.json();
+      const jsonData = await res.json();
+      const data: RawRow[] = jsonData.rows;
       const mapped: Row[] = data.map(([day, month, year, seq , amt, desc,saveStateRowId], i) => ({
         id: i,
         day: day,
